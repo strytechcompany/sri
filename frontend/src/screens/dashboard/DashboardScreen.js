@@ -37,6 +37,7 @@ export default function DashboardScreen({ navigation }) {
         title="Sri Vaishnavi Jewellers"
         onMenuPress={() => setSidebarVisible(true)}
         onLogoutPress={handleLogout}
+        onRefreshPress={fetchDashboardData}
       />
 
       <ScrollView

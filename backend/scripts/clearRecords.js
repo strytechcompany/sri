@@ -1,20 +1,33 @@
 /**
- * One-time script to clear all IssuedRecord documents from MongoDB.
+ * One-time script to clear all transaction-related documents from MongoDB.
  * Run: node scripts/clearRecords.js
  */
 const mongoose = require('mongoose');
 require('dotenv').config();
+
+const COLLECTIONS = [
+  'transactions',
+  'settlements',
+  'stockmovements',
+  'cashledgers',
+  'linestocktransactions',
+  'linestocksettlements',
+  'issuedrecords',
+  'receivedinventories',
+  'chittransactions',
+];
 
 async function main() {
   try {
     await mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI);
     console.log('Connected to MongoDB');
 
-    const result = await mongoose.connection.collection('issuedrecords').deleteMany({});
-    console.log(`✅ Deleted ${result.deletedCount} issued record(s)`);
+    for (const col of COLLECTIONS) {
+      const result = await mongoose.connection.collection(col).deleteMany({});
+      console.log(`✅ Deleted ${result.deletedCount} record(s) from [${col}]`);
+    }
 
-    const goldResult = await mongoose.connection.collection('goldrates').deleteMany({});
-    console.log(`✅ Deleted ${goldResult.deletedCount} gold rate(s) — will be re-seeded fresh on next server start`);
+    console.log('\nAll transaction data cleared.');
   } catch (err) {
     console.error('❌ Error:', err.message);
   } finally {

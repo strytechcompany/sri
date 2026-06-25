@@ -12,7 +12,10 @@
 // Option C — Tunnel (works from any network, run: npx localtunnel --port 5000):
 //   'https://xxxx.loca.lt/api'  ← paste the tunnel URL here
 
-// const API_BASE_URL = 'http://192.168.29.235:5000/api';
-const API_BASE_URL = 'https://sri-3m2b.onrender.com/api';
+// ── LOCAL (same WiFi / hotspot — no sleep, instant) ──────────────────────────
+const API_BASE_URL = 'http://192.168.29.235:5000/api';
+
+// ── RENDER (cloud — sleeps after 15 min on free tier) ────────────────────────
+// const API_BASE_URL = 'https://sri-3m2b.onrender.com/api';
 
 export default API_BASE_URL;

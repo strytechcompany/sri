@@ -14,7 +14,7 @@ const HEADER_BG = '#3D2200';
 const GOLD = '#D4AF37';
 const WHITE = '#FFFFFF';
 
-export default function AppHeader({ title = 'Sri Vaishnavi Jewellers', onMenuPress, onLogoutPress }) {
+export default function AppHeader({ title = 'Sri Vaishnavi Jewellers', onMenuPress, onLogoutPress, onRefreshPress }) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -26,9 +26,16 @@ export default function AppHeader({ title = 'Sri Vaishnavi Jewellers', onMenuPre
 
       <Text style={styles.title} numberOfLines={1}>{title}</Text>
 
-      <TouchableOpacity style={styles.iconBtn} onPress={onLogoutPress} activeOpacity={0.7}>
-        <MaterialCommunityIcons name="logout" size={24} color={GOLD} />
-      </TouchableOpacity>
+      <View style={styles.rightGroup}>
+        {onRefreshPress && (
+          <TouchableOpacity style={styles.iconBtn} onPress={onRefreshPress} activeOpacity={0.7}>
+            <MaterialCommunityIcons name="refresh" size={24} color={GOLD} />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity style={styles.iconBtn} onPress={onLogoutPress} activeOpacity={0.7}>
+          <MaterialCommunityIcons name="logout" size={24} color={GOLD} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -57,6 +64,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     flex: 1,
     textAlign: 'center',
+  },
+  rightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   iconBtn: {
     width: 40,
