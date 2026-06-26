@@ -1,6 +1,5 @@
 const ChitCustomer = require('../models/ChitCustomer');
 const ChitTransaction = require('../models/ChitTransaction');
-const mongoose = require('mongoose');
 const cashLedgerController = require('./cashLedgerController');
 
 // Create a new Chit Customer
@@ -104,17 +103,21 @@ exports.payInstallment = async (req, res) => {
     customer.status = status;
     await customer.save();
 
-    // Log Cash Payment to Cash Ledger
+    // Log Cash Payment to Cash Ledger (non-fatal — payment already committed above)
     if (!paymentMode || paymentMode.toLowerCase() === 'cash') {
-      await cashLedgerController.addLedgerEntry({
-        type: 'IN',
-        amount,
-        source: 'Chit Fund Collection',
-        referenceId: transaction._id,
-        referenceModel: 'ChitTransaction',
-        description: `Chit Fund installment ${installmentNumber} for ${chitId}`,
-        createdBy: req.user ? req.user._id : undefined
-      });
+      try {
+        await cashLedgerController.addLedgerEntry({
+          type: 'IN',
+          amount,
+          source: 'Chit Fund Collection',
+          referenceId: transaction._id,
+          referenceModel: 'ChitTransaction',
+          description: `Chit Fund installment ${installmentNumber} for ${chitId}`,
+          createdBy: req.user?.name || req.user?.email || 'System'
+        });
+      } catch (ledgerErr) {
+        console.error('Ledger entry failed (payment still saved):', ledgerErr.message);
+      }
     }
 
     res.status(201).json({ success: true, data: transaction, customer });
@@ -137,7 +140,7 @@ exports.getChitTransactions = async (req, res) => {
 };
 
 // Get ALL Chit Transactions (for the global Transactions screen)
-exports.getAllChitTransactions = async (req, res) => {
+exports.getAllChitTransactions = async (_req, res) => {
   try {
     const transactions = await ChitTransaction.find()
       .populate('customerId', 'customerName phoneNumber address chitId')
