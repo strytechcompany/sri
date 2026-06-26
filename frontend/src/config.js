@@ -15,7 +15,7 @@
 // ── LOCAL (same WiFi / hotspot — no sleep, instant) ──────────────────────────
 // const API_BASE_URL = 'http://192.168.29.235:5000/api';
 
-// ── RENDER (cloud — sleeps after 15 min on free tier) ────────────────────────
+// ── RENDER (cloud — works from any network / APK build) ──────────────────────
 const API_BASE_URL = 'https://sri-3m2b.onrender.com/api';
 
 export default API_BASE_URL;
