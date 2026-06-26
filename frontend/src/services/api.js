@@ -4,7 +4,7 @@ import API_BASE_URL from '../config';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 60000, // 60s — allows Render free tier cold start (~30–50s)
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -19,9 +19,16 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Retry once on network errors (covers Render cold-start that outlasts timeout)
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    const config = error.config;
+    if (!error.response && !config._retried) {
+      config._retried = true;
+      await new Promise((r) => setTimeout(r, 3000));
+      return api(config);
+    }
     if (error.response && error.response.status === 401) {
       // If we get an Unauthorized error, the token is invalid or expired.
       // Clear storage so the user isn't trapped in a 401 loop
