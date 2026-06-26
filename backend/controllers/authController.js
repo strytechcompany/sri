@@ -61,7 +61,12 @@ const login = async (req, res) => {
       console.log(`[AUTH] Unknown email | email=${email}`);
       try { await LoginAudit.create({ email, ipAddress, device, status: 'Failed - Unauthorized Email' }); } catch (_) {}
       authStore.incrementRateLimit(identifier);
-      return res.status(401).json({ success: false, message: 'User not authorized' });
+      const allowedEmails = authStore.getAuthorizedEmails();
+      const hint =
+        allowedEmails.length === 1
+          ? `Use the registered email ${allowedEmails[0]}.`
+          : `Use one of the registered emails: ${allowedEmails.join(', ')}.`;
+      return res.status(401).json({ success: false, message: `User not authorized. ${hint}` });
     }
 
     const isMatch = await authStore.verifyPassword(password, user.password);

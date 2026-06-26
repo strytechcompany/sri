@@ -120,7 +120,7 @@ export default function BillPreviewScreen({ navigation, route }) {
 
       <ScrollView contentContainerStyle={styles.scroll}>
         
-        {/* THERMAL PAPER CONTAINER (Simulates 80mm roll) */}
+        {/* THERMAL PAPER CONTAINER (Simulates 58mm roll) */}
         <View style={styles.thermalPaper}>
           <Text style={[styles.brandTitle, {fontSize: 20, marginBottom: 2}]}>Sri Vaishnavi Jewellers</Text>
           <Text style={[styles.centerText, {fontSize: 12}]}>No 370, Big Bazaar Street</Text>
@@ -435,8 +435,10 @@ const styles = StyleSheet.create({
   // Thermal Paper Wrapper
   thermalPaper: {
     backgroundColor: '#FFFFFF', // pure white like receipt paper
-    width: 320, // fixed max width simulating 80mm
-    padding: 16,
+    width: '100%',
+    maxWidth: 260,
+    alignSelf: 'center',
+    padding: 12,
     paddingBottom: 40,
     elevation: 5,
     shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { height: 3, width: 0 }

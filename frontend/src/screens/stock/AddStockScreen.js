@@ -14,9 +14,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { useStock } from '../../context/StockContext';
+import { useUsbPrinter } from '../../hooks/useUsbPrinter';
+import { printJewelryLabel } from '../../services/UsbPrinterService';
 
 const GOLD = '#D4AF37';
 const DARK_BROWN = '#4B2E05';
@@ -90,6 +90,7 @@ export default function AddStockScreen({ navigation, route }) {
   const [notes, setNotes] = useState(editItem?.notes ?? '');
   const [barcode, setBarcode] = useState(editItem?.barcode ?? '');
   const [printing, setPrinting] = useState(false);
+  const { status: printerStatus } = useUsbPrinter();
 
   // ─── Gross Weight → auto-sync Net Weight ──────────────────────────────────
   const handleGrossWeightChange = (text) => {
@@ -104,88 +105,34 @@ export default function AddStockScreen({ navigation, route }) {
     setBarcode(`SVJ${ts}${rand}`);
   };
 
-  // ─── Print Barcode Label ───────────────────────────────────────────────────────────
+  // ─── Print Barcode Label via USB OTG (TVS LP46 Lite) ─────────────────────────
   const printBarcode = async () => {
     if (!barcode) {
       Alert.alert('No Barcode', 'Please generate a barcode first.');
       return;
     }
+    if (printerStatus !== 'connected') {
+      Alert.alert(
+        'Printer Not Connected',
+        'USB printer status: ' + printerStatus + '.\n\nPlease connect the TVS LP46 Lite via USB OTG cable and grant USB permission when prompted.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
     setPrinting(true);
-
-    // Safety timeout: release spinner if print dialog never resolves
-    const timeout = setTimeout(() => setPrinting(false), 30000);
-
     try {
-      // Build SVG barcode stripes inline - no external fonts/network needed
-      const buildBarcodeSvg = (code) => {
-        const bars = [];
-        const totalBars = code.length * 2 + 10;
-        const barW = Math.max(1, Math.floor(160 / totalBars));
-        let x = 0;
-        bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="#000"/>`); x += barW;
-        bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="#fff"/>`); x += barW;
-        bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="#000"/>`); x += barW;
-        bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="#fff"/>`); x += barW;
-        for (let i = 0; i < code.length; i++) {
-          const n = code.charCodeAt(i);
-          for (let b = 0; b < 2; b++) {
-            const fill = ((n >> (1 - b)) & 1) ? '#000' : '#fff';
-            bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="${fill}"/>`);
-            x += barW;
-          }
-        }
-        bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="#000"/>`); x += barW;
-        bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="#fff"/>`); x += barW;
-        bars.push(`<rect x="${x}" y="0" width="${barW}" height="22" fill="#000"/>`); x += barW;
-        const totalW = x + barW;
-        return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="22">${bars.join('')}</svg>`;
-      };
-
-      const svgContent = buildBarcodeSvg(barcode);
-      const svgDataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgContent)}`;
-
-      const labelHtml = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @page { size: 50mm 28mm; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 50mm; background: #fff; font-family: Arial, Helvetica, sans-serif; }
-    .label { width: 50mm; padding: 2mm 1.5mm 1.5mm; display: flex; flex-direction: column; align-items: center; }
-    .shop { font-size: 6pt; font-weight: 900; color: #4B2E05; letter-spacing: 0.5pt; text-transform: uppercase; border-bottom: 0.5pt solid #D4AF37; padding-bottom: 1.5pt; margin-bottom: 2pt; text-align: center; width: 100%; }
-    .meta { font-size: 5pt; color: #555; font-weight: 700; margin-bottom: 3pt; text-align: center; }
-    .barcode-img { width: 44mm; height: auto; display: block; }
-    .num { font-size: 5.5pt; letter-spacing: 1pt; color: #222; font-family: 'Courier New', monospace; font-weight: 700; margin-top: 2pt; text-align: center; }
-  </style>
-</head>
-<body>
-  <div class="label">
-    <div class="shop">SRI VAISHNAVI JEWELLERS</div>
-    <div class="meta">${category || '-'} &bull; ${purity || '-'} &bull; ${grossWeight || '0'}g</div>
-    <img class="barcode-img" src="${svgDataUri}" />
-    <div class="num">${barcode}</div>
-  </div>
-</body>
-</html>`;
-
-      // Generate PDF file (avoids expo-print singleton lock from Print.printAsync)
-      const { uri } = await Print.printToFileAsync({ html: labelHtml, base64: false });
-      if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Not Supported', 'Sharing/printing is not available on this device.');
-        return;
-      }
-      await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Print Barcode Label',
-        UTI: 'com.adobe.pdf',
+      await printJewelryLabel({
+        itemName: itemName || designName,
+        itemNumber: barcode,
+        purity,
+        grossWeight,
+        netWeight,
+        barcode,
       });
+      Alert.alert('Printed', 'Barcode label sent to USB printer.');
     } catch (err) {
-      if (!err.message?.includes('cancel')) {
-        Alert.alert('Print Failed', 'Could not generate the barcode label.');
-      }
+      Alert.alert('Print Failed', err.message || 'Could not print the barcode label.');
     } finally {
-      clearTimeout(timeout);
       setPrinting(false);
     }
   };
@@ -391,6 +338,21 @@ export default function AddStockScreen({ navigation, route }) {
               <Text style={styles.barcodeBtnText}>Generate Barcode</Text>
             </TouchableOpacity>
 
+            {/* USB Printer Status */}
+            <View style={styles.printerStatusRow}>
+              <MaterialCommunityIcons
+                name={printerStatus === 'connected' ? 'usb' : 'usb-off'}
+                size={14}
+                color={printerStatus === 'connected' ? '#2C6E49' : '#999'}
+              />
+              <Text style={[styles.printerStatusText, printerStatus === 'connected' && styles.printerStatusConnected]}>
+                {printerStatus === 'connected'      ? 'USB Printer Connected'
+                 : printerStatus === 'requesting_permission' ? 'Requesting USB permission…'
+                 : printerStatus === 'unavailable'  ? 'USB printing (Android only)'
+                 : 'USB Printer Disconnected'}
+              </Text>
+            </View>
+
             {barcode ? (
               <>
                 <View style={styles.barcodePreview}>
@@ -557,6 +519,20 @@ const styles = StyleSheet.create({
   },
   rowFields: {
     flexDirection: 'row',
+  },
+  printerStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 6,
+  },
+  printerStatusText: {
+    fontSize: 11,
+    color: '#999',
+    fontWeight: '600',
+  },
+  printerStatusConnected: {
+    color: '#2C6E49',
   },
   barcodeBtn: {
     flexDirection: 'row',

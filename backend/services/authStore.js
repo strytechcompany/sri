@@ -4,7 +4,7 @@ let users = [];
 
 const loadUsers = () => {
   users = [];
-  const maxUsers = parseInt(process.env.MAX_USERS || '10', 10);
+  const maxUsers = parseInt(process.env.MAX_USERS || '1', 10);
   
   for (let i = 1; i <= maxUsers; i++) {
     const email = process.env[`USER${i}_EMAIL`];
@@ -31,6 +31,10 @@ const getUserByEmail = (email) => {
 
 const getUserById = (id) => {
   return users.find(u => u.id === id);
+};
+
+const getAuthorizedEmails = () => {
+  return users.map((u) => u.email);
 };
 
 const verifyPassword = async (enteredPassword, storedValue) => {
@@ -102,6 +106,7 @@ module.exports = {
   loadUsers,
   getUserByEmail,
   getUserById,
+  getAuthorizedEmails,
   verifyPassword,
   setOtp,
   verifyOtp,

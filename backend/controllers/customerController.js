@@ -25,39 +25,48 @@ exports.createCustomer = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Dealer Company Name is required for B2D customers' });
     }
 
-    const customer = new Customer({
+    const customerPayload = {
       customerType,
-      customerName: customerName.trim(),
-      phoneNumber: phoneNumber.trim(),
+      customerName: customerName?.trim() || '',
+      phoneNumber: phoneNumber?.trim() || '',
       shopName: shopName?.trim() || '',
       dealerCompanyName: dealerCompanyName?.trim() || '',
       dealerCode: dealerCode?.trim() || '',
       gstNumber: gstNumber?.trim() || '',
-      address: address.trim(),
+      address: address?.trim() || '',
       oldBalance: parseFloat(oldBalance) || 0,
       advance: parseFloat(advance) || 0,
       remarks: remarks?.trim() || '',
       createdBy: req.user._id,
-    });
+    };
 
-    let saved = false;
-    let attempts = 0;
-    const maxAttempts = 3;
+    const saveWithCodeRetry = async () => {
+      for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+          const customer = new Customer({
+            ...customerPayload,
+            customerCode: await Customer.generateCustomerCode(customerPayload.customerType),
+          });
+          return await customer.save();
+        } catch (error) {
+          const isCodeConflict =
+            error.code === 11000 &&
+            (error.keyPattern?.customerCode || String(error.message || '').includes('customerCode'));
 
-    while (!saved && attempts < maxAttempts) {
-      try {
-        attempts++;
-        await customer.save();
-        saved = true;
-      } catch (error) {
-        // If it's a code duplicate conflict, clear the code so the pre-save hook generates a fresh one
-        if (error.code === 11000 && attempts < maxAttempts) {
-          customer.customerCode = undefined;
-          continue;
+          if (isCodeConflict && attempt < 5) {
+            console.warn(
+              '[createCustomer] customerCode collision, retrying',
+              error.keyValue || error.message
+            );
+            continue;
+          }
+          throw error;
         }
-        throw error;
       }
-    }
+      throw new Error('Unable to create customer after multiple code retries');
+    };
+
+    await saveWithCodeRetry();
 
     res.status(201).json({
       success: true,
@@ -72,7 +81,7 @@ exports.createCustomer = async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
-        message: 'A code conflict occurred multiple times. Please try again.',
+        message: 'Customer code already exists. Please try again.',
       });
     }
     console.error('createCustomer error:', error.message);

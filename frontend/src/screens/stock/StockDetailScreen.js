@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Print from 'expo-print';
 import { useStock } from '../../context/StockContext';
+import { useUsbPrinter } from '../../hooks/useUsbPrinter';
+import { printJewelryLabel } from '../../services/UsbPrinterService';
 
 const GOLD = '#D4AF37';
 const DARK_BROWN = '#4B2E05';
@@ -44,6 +45,8 @@ export default function StockDetailScreen({ navigation, route }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const { status: printerStatus } = useUsbPrinter();
 
   useEffect(() => {
     loadItem();
@@ -63,49 +66,29 @@ export default function StockDetailScreen({ navigation, route }) {
   };
 
   const handlePrintLabel = async () => {
-    const barcode = item.barcode || item.itemNumber;
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    @page { size: 3in 1.5in; margin: 0; }
-    body {
-      width: 3in; height: 1.5in;
-      font-family: Arial, sans-serif;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 4px;
+    if (printerStatus !== 'connected') {
+      Alert.alert(
+        'Printer Not Connected',
+        'USB printer status: ' + printerStatus + '.\n\nPlease connect the TVS LP46 Lite via USB OTG cable and grant USB permission when prompted.',
+        [{ text: 'OK' }]
+      );
+      return;
     }
-    .shop  { font-size: 9pt; font-weight: bold; letter-spacing: 0.5px; }
-    .meta  { font-size: 7pt; color: #333; margin: 1px 0; }
-    .bc    { margin: 3px 0; }
-    .bc svg { width: 2.7in; height: 36px; }
-    .num   { font-size: 8pt; font-weight: bold; letter-spacing: 1px; }
-  </style>
-</head>
-<body>
-  <div class="shop">Sri Vaishnavi Jewellers</div>
-  <div class="meta">${item.designName}  |  ${item.purity}</div>
-  <div class="meta">Net: ${Number(item.netWeight).toFixed(3)} g  |  Gross: ${Number(item.grossWeight).toFixed(3)} g</div>
-  <div class="bc"><svg id="bc"></svg></div>
-  <div class="num">${item.itemNumber}</div>
-  <script>
-    JsBarcode('#bc', '${barcode}', {
-      format: 'CODE128', width: 1.4, height: 36,
-      displayValue: false, margin: 0
-    });
-  </script>
-</body>
-</html>`;
+    setPrinting(true);
     try {
-      await Print.printAsync({ html });
+      await printJewelryLabel({
+        itemName: item.itemName || item.designName,
+        itemNumber: item.itemNumber,
+        purity: item.purity,
+        grossWeight: item.grossWeight,
+        netWeight: item.netWeight,
+        barcode: item.barcode || item.itemNumber,
+      });
+      Alert.alert('Printed', 'Label sent to USB printer.');
     } catch (err) {
-      if (!err?.message?.toLowerCase().includes('cancel')) {
-        Alert.alert('Print Error', err?.message || 'Could not open print dialog.');
-      }
+      Alert.alert('Print Failed', err.message || 'Could not print the label.');
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -281,15 +264,37 @@ export default function StockDetailScreen({ navigation, route }) {
           )}
         </View>
 
+        {/* ─── USB Printer Status ─── */}
+        <View style={styles.usbStatusRow}>
+          <MaterialCommunityIcons
+            name={printerStatus === 'connected' ? 'usb' : 'usb-off'}
+            size={14}
+            color={printerStatus === 'connected' ? '#2C6E49' : '#999'}
+          />
+          <Text style={[styles.usbStatusText, printerStatus === 'connected' && styles.usbStatusConnected]}>
+            {printerStatus === 'connected'      ? 'USB Printer Connected'
+             : printerStatus === 'requesting_permission' ? 'Requesting USB permission…'
+             : printerStatus === 'unavailable'  ? 'USB printing (Android only)'
+             : 'USB Printer Disconnected'}
+          </Text>
+        </View>
+
         {/* ─── Action Buttons ─── */}
         <View style={styles.actionRow}>
           <TouchableOpacity
-            style={styles.printBtn}
+            style={[styles.printBtn, printing && styles.btnDisabled]}
             onPress={handlePrintLabel}
             activeOpacity={0.85}
+            disabled={printing}
           >
-            <MaterialCommunityIcons name="barcode" size={18} color={HEADER_BG} />
-            <Text style={styles.printBtnText}>Print Label</Text>
+            {printing ? (
+              <ActivityIndicator color={HEADER_BG} size="small" />
+            ) : (
+              <>
+                <MaterialCommunityIcons name="barcode" size={18} color={HEADER_BG} />
+                <Text style={styles.printBtnText}>Print Label</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -519,6 +524,21 @@ const styles = StyleSheet.create({
   deleteBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   btnDisabled: { opacity: 0.6 },
 
+  usbStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  usbStatusText: {
+    fontSize: 11,
+    color: '#999',
+    fontWeight: '600',
+  },
+  usbStatusConnected: {
+    color: '#2C6E49',
+  },
   loadingText: { color: '#A08850', marginTop: 12, fontSize: 14, fontWeight: '600' },
   errorText: { color: DARK_BROWN, fontSize: 18, fontWeight: '700', marginTop: 12 },
   backLink: { marginTop: 16 },

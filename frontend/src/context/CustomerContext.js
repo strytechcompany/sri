@@ -57,11 +57,30 @@ export const CustomerProvider = ({ children }) => {
 
   // ─── Create Customer ───────────────────────────────────────────────────────
   const createCustomer = useCallback(async (data) => {
-    const res = await customerAPI.create(data);
-    if (res.data.success) {
-      await fetchCustomers({ search: searchQuery, type: typeFilter }, true);
+    const maxRetries = 2;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await customerAPI.create(data);
+        if (res.data.success) {
+          await fetchCustomers({ search: searchQuery, type: typeFilter }, true);
+        }
+        return res.data;
+      } catch (err) {
+        lastError = err;
+        const status = err?.response?.status;
+        const message = String(err?.response?.data?.message || '').toLowerCase();
+        const isCodeConflict = status === 409 && message.includes('customer code already exists');
+
+        if (isCodeConflict && attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          continue;
+        }
+        throw err;
+      }
     }
-    return res.data;
+    throw lastError;
   }, [fetchCustomers, searchQuery, typeFilter]);
 
   // ─── Update Customer ───────────────────────────────────────────────────────

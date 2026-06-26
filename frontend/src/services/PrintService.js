@@ -10,7 +10,303 @@ let _busy = false;
 const acquire = () => { if (_busy) return false; _busy = true; return true; };
 const release = () => { _busy = false; };
 
+const THERMAL_PAPER_MM = 58;
+const THERMAL_WIDTH_PTS = Math.round((THERMAL_PAPER_MM * 72) / 25.4);
+
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const formatMoney = (value) => Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const formatGram = (value) => `${Number(value || 0).toFixed(3)}g`;
+const splitLines = (value, fallback = '') =>
+  String(value ?? fallback)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+const renderRow = (label, value, valueClass = '') => `
+  <div class="detail-row">
+    <div class="detail-label">${escapeHtml(label)}</div>
+    <div class="detail-value ${valueClass}">${value}</div>
+  </div>
+`;
+
 const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
+  const settingsReq = await settingsAPI.getSettings();
+  const settings = settingsReq.data.data;
+  const { shopProfile, billSettings } = settings;
+  const tamilMsg = customTamilMsg ?? billSettings.tamilMessage;
+  const footerMsg = billSettings.footerMessage;
+  const shopName = shopProfile?.shopName || 'Sri Vaishnavi Jewellers';
+  const addressLines = (shopProfile?.address || 'No 370, Big Bazaar Street\n(Opp. B.G. Naidu Sweets)')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const phoneLines = [shopProfile?.phone1, shopProfile?.phone2].filter(Boolean);
+  const {
+    _id,
+    createdAt,
+    transactionType,
+    customerId,
+    issueItems = [],
+    receiptItems = [],
+    paymentMode,
+    paymentDetails,
+    issueTotalWeight,
+    issueTotalAmount,
+    receiptTotalWeight,
+    receiptTotalAmount,
+    finalAmount,
+    goldRate,
+    description,
+    goldPaymentWeight,
+    goldPaymentPurity,
+    goldConvertedAmount,
+    oldBalanceBefore,
+    oldBalanceAfter,
+    advanceBalanceBefore,
+    advanceBalanceAfter,
+    convertedGram,
+    gstDetails,
+  } = transaction;
+
+  const dateStr = new Date(createdAt).toLocaleDateString('en-GB');
+  const timeStr = new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  const row = (label, value, className = '') => `
+    <div class="info-row ${className}">
+      <div class="label-cell">${label}</div>
+      <div class="value-cell">${value}</div>
+    </div>
+  `;
+
+  const thermalStyles = `
+    @page { size: 58mm auto; margin: 0; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 58mm;
+      height: auto;
+      background: #fff;
+      color: #000;
+      font-family: monospace;
+      font-size: 12px;
+      font-weight: 600;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    * { box-sizing: border-box; color: #000; background: #fff; }
+    .receipt-container {
+      width: 100%;
+      height: auto;
+      margin: 0;
+      padding: 2mm;
+      font-family: monospace;
+      font-size: 12px;
+      font-weight: 600;
+      color: #000;
+      background: #fff;
+      text-align: left;
+    }
+    .center { text-align: center; }
+    .left { text-align: left; }
+    .right { text-align: right; }
+    .bold { font-weight: 700; }
+    .shop-name { font-size: 18px; font-weight: 700; line-height: 1.05; }
+    .subline { font-size: 12px; line-height: 1.15; }
+    .divider {
+      border: none;
+      border-top: 1px dashed #000;
+      margin: 4px 0;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 2mm;
+      margin: 1px 0;
+      width: 100%;
+    }
+    .label-cell {
+      flex: 0 0 42%;
+      text-align: left;
+    }
+    .value-cell {
+      flex: 1;
+      text-align: right;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin: 4px 0;
+      font-size: 11px;
+      color: #000;
+      background: #fff;
+    }
+    th, td {
+      text-align: left;
+      padding: 2px 0;
+      vertical-align: top;
+      word-break: break-word;
+      color: #000;
+      background: #fff;
+    }
+    th { border-bottom: 1px dashed #000; font-weight: 700; }
+    .amt-col { text-align: right; }
+    .bill-col { width: 18%; }
+    .item-col { width: 34%; }
+    .weight-col { width: 16%; }
+    .purity-col { width: 14%; }
+    .amount-col { width: 18%; text-align: right; }
+    .rate-banner {
+      width: 100%;
+      text-align: center;
+      padding: 2mm 1mm;
+      border-top: 1px dashed #000;
+      border-bottom: 1px dashed #000;
+      margin: 4px 0;
+      font-weight: 700;
+    }
+  `;
+
+  const styles = thermalStyles; // Standardize all printing to 80mm Thermal Receipt
+
+  let issueRows = '';
+  issueItems.forEach(item => {
+    issueRows += `
+      <tr>
+        <td class="bill-col">${item.billNo || '-'}</td>
+        <td class="item-col">${item.itemName || '-'}</td>
+        <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
+        <td class="purity-col">${item.purity ?? '-'}</td>
+        <td class="amount-col">${Number(item.amount || 0).toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
+      </tr>
+    `;
+  });
+
+  let receiptRows = '';
+  receiptItems.forEach(item => {
+    receiptRows += `
+      <tr>
+        <td class="bill-col">${item.billNo || '-'}</td>
+        <td class="item-col">${item.receiptType || '-'}</td>
+        <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
+        <td class="purity-col">${item.purity ?? '-'}</td>
+        <td class="amount-col">${Number(item.amount || 0).toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
+      </tr>
+    `;
+  });
+
+  const cgst = gstDetails?.cgstAmount || 0;
+  const sgst = gstDetails?.sgstAmount || 0;
+  const collectedAmount = paymentMode === 'Gold' ? goldConvertedAmount : (paymentDetails?.amount || 0);
+
+  return `<!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+        <style>${styles}</style>
+      </head>
+      <body>
+        <div class="receipt-container">
+          <div class="center shop-name">${escapeHtml(shopName)}</div>
+          ${addressLines.map((line) => `<div class="center subline">${escapeHtml(line)}</div>`).join('')}
+          ${phoneLines.length ? `<div class="center subline">Phone : ${escapeHtml(phoneLines.join(' / '))}</div>` : ''}
+
+        <div class="divider"></div>
+        <div class="center bold">${escapeHtml((transactionType || 'B2B') + ' BILL')}</div>
+        <div class="divider"></div>
+
+        ${row('Txn No:', _id.slice(-6).toUpperCase())}
+        ${row('Date/Time:', `${dateStr} ${timeStr}`)}
+
+        <div class="divider"></div>
+        <div class="bold">CUSTOMER DETAILS</div>
+        ${row('Name:', customerId?.customerName || 'N/A')}
+        ${row('Phone:', customerId?.phoneNumber || 'N/A')}
+        ${row('Address:', customerId?.address || 'N/A')}
+        ${row('Old Bal:', `${Number(oldBalanceBefore).toFixed(3)}g`)}
+        ${row('Advance:', `${Number(advanceBalanceBefore).toFixed(3)}g`)}
+
+        <div class="divider"></div>
+        <div class="center bold" style="padding: 5px; border: 1px dashed #000;">
+          GOLD RATE TODAY: \u20B9${goldRate}
+        </div>
+
+        ${issueItems.length > 0 ? `
+          <div class="divider"></div>
+          <div class="bold">ISSUED PRODUCTS</div>
+          <table>
+            <thead>
+              <tr><th>Bill No</th><th>Item</th><th>Wt(g)</th><th>Purity</th><th class="amt-col">Amt(\u20B9)</th></tr>
+            </thead>
+            <tbody>${issueRows}</tbody>
+          </table>
+          <div class="divider"></div>
+          ${row('Issue Total Wt:', `${issueTotalWeight.toFixed(3)}g`, 'bold')}
+          ${row('Issue Total Amt:', issueTotalAmount.toLocaleString('en-IN', {maximumFractionDigits:2}), 'bold')}
+        ` : ''}
+
+        ${receiptItems.length > 0 ? `
+          <div class="divider"></div>
+          <div class="bold">RECEIVED ITEMS</div>
+          <table>
+            <thead>
+              <tr><th>Bill No</th><th>Type</th><th>Wt(g)</th><th>Less</th><th>Purity</th><th class="amt-col">Amt(\u20B9)</th></tr>
+            </thead>
+            <tbody>${receiptRows}</tbody>
+          </table>
+          <div class="divider"></div>
+          ${row('Receipt Total Wt:', `${receiptTotalWeight.toFixed(3)}g`, 'bold')}
+          ${row('Receipt Total Amt:', receiptTotalAmount.toLocaleString('en-IN', {maximumFractionDigits:2}), 'bold')}
+        ` : ''}
+
+        <div class="divider"></div>
+        <div class="bold">PAYMENT DETAILS</div>
+        ${row('Mode:', paymentMode)}
+        ${paymentMode === 'Gold' ? `
+          ${row('Gold Wt:', `${goldPaymentWeight}g (${goldPaymentPurity})`)}
+        ` : ''}
+        ${row('Collected Amt:', collectedAmount.toLocaleString('en-IN', {maximumFractionDigits:2}))}
+        ${description ? row('Desc:', description) : ''}
+
+        <div class="divider"></div>
+        <div class="bold">PAYMENT SUMMARY</div>
+        ${row('Subtotal:', (issueTotalAmount - receiptTotalAmount).toLocaleString('en-IN', {maximumFractionDigits:2}))}
+        ${gstDetails?.isOn ? `
+          ${row('CGST:', cgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
+          ${row('SGST:', sgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
+        ` : ''}
+        ${row('FINAL AMOUNT:', `\u20B9${finalAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
+        ${row('PAID:', `- \u20B9${collectedAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
+        ${row('BALANCE DUE:', `\u20B9${Math.max(0, finalAmount - collectedAmount).toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
+
+        <div class="divider"></div>
+        <div class="bold">TRANSACTION SUMMARY</div>
+        ${row('Converted Gram:', `${Number(convertedGram).toFixed(3)}g`)}
+        ${row('New Old Balance:', `${Number(oldBalanceAfter).toFixed(3)}g`, 'bold')}
+        ${row('New Advance:', `${Number(advanceBalanceAfter).toFixed(3)}g`, 'bold')}
+
+        <div class="divider"></div>
+        <div class="center" style="margin-top: 10px;">${tamilMsg}</div>
+        <div class="center" style="margin-top: 10px;">Thank You For Visiting</div>
+        <div class="center bold">Sri Vaishnavi Jewellers</div>
+        <div class="center">Visit Again</div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
   const settingsReq = await settingsAPI.getSettings();
   const settings = settingsReq.data.data;
   const { shopProfile, billSettings } = settings;
@@ -43,168 +339,194 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
     gstDetails,
   } = transaction;
 
+  const shopName = shopProfile?.shopName || 'Sri Vaishnavi Jewellers';
+  const addressLines = splitLines(
+    shopProfile?.address,
+    'No 370, Big Bazaar Street\n(Opp. B.G. Naidu Sweets)'
+  );
+  const phoneLine = [shopProfile?.phone1, shopProfile?.phone2].filter(Boolean).join(' / ');
+  const billTitle = `${transactionType || 'B2B'} BILL`;
+  const txnNo = _id ? _id.slice(-6).toUpperCase() : 'PENDING';
   const dateStr = new Date(createdAt).toLocaleDateString('en-GB');
   const timeStr = new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-
-  const row = (label, value, className = '') => `
-    <table class="info-row ${className}">
-      <tr>
-        <td class="label-cell">${label}</td>
-        <td class="value-cell">${value}</td>
-      </tr>
-    </table>
-  `;
-
-  const thermalStyles = `
-    html, body { margin: 0; padding: 0; width: 80mm; height: auto; background: #fff; color: #000; font-family: monospace; font-size: 12px; font-weight: bold; }
-    * { color: #000; background: #fff; }
-    .receipt-container { width: 75mm; height: auto; margin: 0 auto; padding: 0 0 0 2mm; font-family: monospace; font-size: 12px; font-weight: bold; color: #000; background: #fff; text-align: left; }
-    .center { text-align: center; }
-    .bold { font-weight: bold; }
-    .divider { border-bottom: 1px dashed #000; margin: 4px 0; }
-    .info-row { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 12px; font-weight: bold; color: #000; background: #fff; }
-    .info-row td { padding: 0 2px; vertical-align: top; color: #000; background: #fff; }
-    .label-cell { text-align: left; width: 45%; }
-    .value-cell { text-align: right; width: 55%; }
-    table { width: 100%; border-collapse: collapse; margin: 4px 0; font-size: 12px; table-layout: fixed; font-weight: bold; color: #000; background: #fff; }
-    th, td { text-align: left; padding: 2px; vertical-align: top; word-wrap: break-word; color: #000; background: #fff; }
-    th { border-bottom: 1px dashed #000; }
-    .amt-col { text-align: right; }
-  `;
-
-  const styles = thermalStyles; // Standardize all printing to 80mm Thermal Receipt
-
-  let issueRows = '';
-  issueItems.forEach(item => {
-    issueRows += `
-      <tr>
-        <td>${item.billNo}</td>
-        <td>${item.itemName}</td>
-        <td>${item.weight.toFixed(3)}g</td>
-        <td>${item.purity.toFixed(3)}g</td>
-        <td class="amt-col">${item.amount.toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
-      </tr>
-    `;
-  });
-
-  let receiptRows = '';
-  receiptItems.forEach(item => {
-    receiptRows += `
-      <tr>
-        <td>${item.billNo || '-'}</td>
-        <td>${item.receiptType}</td>
-        <td>${item.weight.toFixed(3)}g</td>
-        <td>${item.less}g</td>
-        <td>${item.purity.toFixed(3)}g</td>
-        <td class="amt-col">${item.amount.toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
-      </tr>
-    `;
-  });
-
   const cgst = gstDetails?.cgstAmount || 0;
   const sgst = gstDetails?.sgstAmount || 0;
   const collectedAmount = paymentMode === 'Gold' ? goldConvertedAmount : (paymentDetails?.amount || 0);
+  const balanceDue = Math.max(0, finalAmount - collectedAmount);
+
+  const issueRows = issueItems.map((item) => `
+    <tr>
+      <td class="bill-col">${escapeHtml(item.billNo || '-')}</td>
+      <td class="item-col">${escapeHtml(item.itemName || '-')}</td>
+      <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
+      <td class="purity-col">${escapeHtml(item.purity ?? '-')}</td>
+      <td class="amount-col">${formatMoney(item.amount)}</td>
+    </tr>
+  `).join('');
+
+  const receiptRows = receiptItems.map((item) => `
+    <tr>
+      <td class="bill-col">${escapeHtml(item.billNo || '-')}</td>
+      <td class="item-col">${escapeHtml(item.receiptType || '-')}</td>
+      <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
+      <td class="purity-col">${escapeHtml(item.purity ?? '-')}</td>
+      <td class="amount-col">${formatMoney(item.amount)}</td>
+    </tr>
+  `).join('');
 
   return `<!DOCTYPE html>
     <html>
       <head>
-        <meta charset="UTF-8">
+        <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
-        <style>${styles}</style>
+        <style>
+          @page { size: 58mm auto; margin: 0; }
+          html, body {
+            width: 58mm;
+            margin: 0;
+            padding: 0;
+            background: #fff;
+            color: #000;
+            font-family: monospace;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          * { box-sizing: border-box; }
+          .receipt {
+            width: 100%;
+            max-width: 58mm;
+            margin: 0 auto;
+            padding: 2mm;
+          }
+          .center { text-align: center; }
+          .shop-header { width: 100%; text-align: center; }
+          .shop-name { font-size: 18px; font-weight: 700; line-height: 1.05; }
+          .subline { font-size: 12px; line-height: 1.15; white-space: pre-wrap; word-break: break-word; }
+          .divider { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+          .detail-row { display: flex; justify-content: space-between; gap: 2mm; margin: 1px 0; width: 100%; }
+          .detail-label { flex: 0 0 42%; text-align: left; }
+          .detail-value { flex: 1; text-align: right; word-break: break-word; white-space: pre-wrap; }
+          .rate-banner { width: 100%; text-align: center; font-weight: 700; padding: 2mm 1mm; border-top: 1px dashed #000; border-bottom: 1px dashed #000; margin: 4px 0; }
+          .section-title { text-align: center; font-weight: 700; margin: 3px 0 2px; }
+          table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 3px 0; font-size: 11px; }
+          th, td { padding: 2px 0; vertical-align: top; word-break: break-word; }
+          th { text-align: left; border-bottom: 1px dashed #000; font-weight: 700; }
+          .bill-col { width: 18%; }
+          .item-col { width: 34%; }
+          .weight-col { width: 16%; }
+          .purity-col { width: 14%; }
+          .amount-col { width: 18%; text-align: right; }
+          .footer { text-align: center; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
+          .right { text-align: right; }
+        </style>
       </head>
       <body>
-        <div class="receipt-container">
-          <div class="center bold" style="margin-bottom: 5px;">SRI VAISHNAVI JEWELLERS</div>
-        <div class="center">No 370, Big Bazaar Street</div>
-        <div class="center">(Opp - B.G. Naidu Sweets)</div>
-        <div class="center">Phone: 8248134521</div>
-        
-        <div class="divider"></div>
-        <div class="center bold">${transactionType} BILL</div>
-        <div class="divider"></div>
+        <div class="receipt">
+          <div class="shop-header">
+            <div class="center shop-name">${escapeHtml(shopName)}</div>
+          </div>
+          ${addressLines.map((line) => `<div class="center subline">${escapeHtml(line)}</div>`).join('')}
+          ${phoneLine ? `<div class="center subline">Phone : ${escapeHtml(phoneLine)}</div>` : ''}
 
-        ${row('Txn No:', _id.slice(-6).toUpperCase())}
-        ${row('Date/Time:', `${dateStr} ${timeStr}`)}
+          <hr class="divider" />
+          <div class="center section-title">${escapeHtml(billTitle)}</div>
+          <hr class="divider" />
 
-        <div class="divider"></div>
-        <div class="bold">CUSTOMER DETAILS</div>
-        ${row('Name:', customerId?.customerName || 'N/A')}
-        ${row('Phone:', customerId?.phoneNumber || 'N/A')}
-        ${row('Address:', customerId?.address || 'N/A')}
-        ${row('Old Bal:', `${Number(oldBalanceBefore).toFixed(3)}g`)}
-        ${row('Advance:', `${Number(advanceBalanceBefore).toFixed(3)}g`)}
+          ${renderRow('Txn No:', escapeHtml(txnNo))}
+          ${renderRow('Date:', escapeHtml(dateStr))}
+          ${renderRow('Time:', escapeHtml(timeStr))}
 
-        <div class="divider"></div>
-        <div class="center bold" style="padding: 5px; border: 1px dashed #000;">
-          GOLD RATE TODAY: ₹${goldRate}
-        </div>
+          <hr class="divider" />
+          <div class="section-title">CUSTOMER DETAILS</div>
+          ${renderRow('Customer Name:', escapeHtml(customerId?.customerName || 'N/A'))}
+          ${renderRow('Phone:', escapeHtml(customerId?.phoneNumber || 'N/A'))}
+          ${renderRow('Address:', escapeHtml(customerId?.address || 'N/A'))}
+          ${renderRow('Old Balance:', formatGram(oldBalanceBefore))}
+          ${renderRow('Advance:', formatGram(advanceBalanceBefore))}
 
-        ${issueItems.length > 0 ? `
-          <div class="divider"></div>
-          <div class="bold">ISSUED PRODUCTS</div>
-          <table>
-            <thead>
-              <tr><th>Bill No</th><th>Item</th><th>Wt(g)</th><th>Purity</th><th class="amt-col">Amt(₹)</th></tr>
-            </thead>
-            <tbody>${issueRows}</tbody>
-          </table>
-          <div class="divider"></div>
-          ${row('Issue Total Wt:', `${issueTotalWeight.toFixed(3)}g`, 'bold')}
-          ${row('Issue Total Amt:', issueTotalAmount.toLocaleString('en-IN', {maximumFractionDigits:2}), 'bold')}
-        ` : ''}
+          <hr class="divider" />
+          <div class="rate-banner">GOLD RATE TODAY : \u20B9${escapeHtml(goldRate)}</div>
 
-        ${receiptItems.length > 0 ? `
-          <div class="divider"></div>
-          <div class="bold">RECEIVED ITEMS</div>
-          <table>
-            <thead>
-              <tr><th>Bill No</th><th>Type</th><th>Wt(g)</th><th>Less</th><th>Purity</th><th class="amt-col">Amt(₹)</th></tr>
-            </thead>
-            <tbody>${receiptRows}</tbody>
-          </table>
-          <div class="divider"></div>
-          ${row('Receipt Total Wt:', `${receiptTotalWeight.toFixed(3)}g`, 'bold')}
-          ${row('Receipt Total Amt:', receiptTotalAmount.toLocaleString('en-IN', {maximumFractionDigits:2}), 'bold')}
-        ` : ''}
+          ${issueItems.length > 0 ? `
+            <hr class="divider" />
+            <div class="section-title">ISSUED PRODUCTS</div>
+            <table>
+              <thead>
+                <tr>
+                  <th class="bill-col">Bill No</th>
+                  <th class="item-col">Item</th>
+                  <th class="weight-col">Weight(g)</th>
+                  <th class="purity-col">Purity</th>
+                  <th class="amount-col">Amount</th>
+                </tr>
+              </thead>
+              <tbody>${issueRows}</tbody>
+            </table>
+            <hr class="divider" />
+            ${renderRow('Issue Total Weight', formatGram(issueTotalWeight), 'right')}
+            ${renderRow('Issue Total Amount', `\u20B9${formatMoney(issueTotalAmount)}`, 'right')}
+          ` : ''}
 
-        <div class="divider"></div>
-        <div class="bold">PAYMENT DETAILS</div>
-        ${row('Mode:', paymentMode)}
-        ${paymentMode === 'Gold' ? `
-          ${row('Gold Wt:', `${goldPaymentWeight}g (${goldPaymentPurity})`)}
-        ` : ''}
-        ${row('Collected Amt:', collectedAmount.toLocaleString('en-IN', {maximumFractionDigits:2}))}
-        ${description ? row('Desc:', description) : ''}
+          ${receiptItems.length > 0 ? `
+            <hr class="divider" />
+            <div class="section-title">RECEIVED ITEMS</div>
+            <table>
+              <thead>
+                <tr>
+                  <th class="bill-col">Bill No</th>
+                  <th class="item-col">Item</th>
+                  <th class="weight-col">Weight(g)</th>
+                  <th class="purity-col">Purity</th>
+                  <th class="amount-col">Amount</th>
+                </tr>
+              </thead>
+              <tbody>${receiptRows}</tbody>
+            </table>
+            <hr class="divider" />
+            ${renderRow('Receipt Total Weight', formatGram(receiptTotalWeight), 'right')}
+            ${renderRow('Receipt Total Amount', `\u20B9${formatMoney(receiptTotalAmount)}`, 'right')}
+          ` : ''}
 
-        <div class="divider"></div>
-        <div class="bold">PAYMENT SUMMARY</div>
-        ${row('Subtotal:', (issueTotalAmount - receiptTotalAmount).toLocaleString('en-IN', {maximumFractionDigits:2}))}
-        ${gstDetails?.isOn ? `
-          ${row('CGST:', cgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
-          ${row('SGST:', sgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
-        ` : ''}
-        ${row('FINAL AMOUNT:', `₹${finalAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
-        ${row('PAID:', `- ₹${collectedAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
-        ${row('BALANCE DUE:', `₹${Math.max(0, finalAmount - collectedAmount).toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
+          <hr class="divider" />
+          <div class="section-title">PAYMENT DETAILS</div>
+          ${renderRow('Payment Mode', escapeHtml(paymentMode || 'N/A'))}
+          ${paymentMode === 'Gold' ? renderRow('Gold Wt:', `${escapeHtml(goldPaymentWeight)}g (${escapeHtml(goldPaymentPurity)})`) : ''}
+          ${renderRow('Collected Amount', `\u20B9${formatMoney(collectedAmount)}`)}
+          ${description ? renderRow('Description', escapeHtml(description)) : ''}
 
-        <div class="divider"></div>
-        <div class="bold">TRANSACTION SUMMARY</div>
-        ${row('Converted Gram:', `${Number(convertedGram).toFixed(3)}g`)}
-        ${row('New Old Balance:', `${Number(oldBalanceAfter).toFixed(3)}g`, 'bold')}
-        ${row('New Advance:', `${Number(advanceBalanceAfter).toFixed(3)}g`, 'bold')}
+          <hr class="divider" />
+          <div class="section-title">SUMMARY</div>
+          ${renderRow('Subtotal', `\u20B9${formatMoney(issueTotalAmount - receiptTotalAmount)}`)}
+          ${gstDetails?.isOn ? `
+            ${renderRow('CGST', `\u20B9${formatMoney(cgst)}`)}
+            ${renderRow('SGST', `\u20B9${formatMoney(sgst)}`)}
+          ` : ''}
+          ${renderRow('Final Amount', `\u20B9${formatMoney(finalAmount)}`)}
+          ${renderRow('Paid', `- \u20B9${formatMoney(collectedAmount)}`)}
+          ${renderRow('Balance Due', `\u20B9${formatMoney(balanceDue)}`)}
 
-        <div class="divider"></div>
-        <div class="center" style="margin-top: 10px;">${tamilMsg}</div>
-        <div class="center" style="margin-top: 10px;">Thank You For Visiting</div>
-        <div class="center bold">Sri Vaishnavi Jewellers</div>
-        <div class="center">Visit Again</div>
+          <hr class="divider" />
+          <div class="section-title">TRANSACTION SUMMARY</div>
+          ${renderRow('Converted Gram', formatGram(convertedGram))}
+          ${renderRow('New Gold Balance', formatGram(oldBalanceAfter))}
+          ${renderRow('Advance', formatGram(advanceBalanceAfter))}
+
+          <hr class="divider" />
+          <div class="footer">${escapeHtml(tamilMsg)}</div>
+          <div class="footer" style="margin-top: 6px;">Thank You For Visiting</div>
+          <div class="center shop-name" style="font-size: 14px; margin-top: 2px;">${escapeHtml(shopName)}</div>
+          <div class="center subline">Visit Again</div>
+          ${footerMsg ? `<div class="footer" style="margin-top: 4px;">${escapeHtml(footerMsg)}</div>` : ''}
         </div>
       </body>
-    </html>
-  `;
+    </html>`;
 };
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
 // _printViaPDF: generates a correctly-sized PDF then opens the NATIVE print
 // dialog (not share sheet). Share-to-print sends raw PDF binary to thermal
 // printers which they interpret as ESC/POS noise → blank paper.
@@ -212,7 +534,7 @@ const _printViaPDF = async (html, height) => {
   const { uri } = await Print.printToFileAsync({
     html,
     base64: false,
-    width: 227,   // 80mm in PDF points (80 × 72/25.4 ≈ 227)
+    width: THERMAL_WIDTH_PTS,   // 80mm in PDF points (80 × 72/25.4 ≈ 227)
     height,
     margins: { left: 0, top: 0, right: 0, bottom: 0 },
   });
@@ -220,11 +542,11 @@ const _printViaPDF = async (html, height) => {
 };
 
 // _sharePDF: used only for WhatsApp sharing — opens the OS share sheet.
-const _sharePDF = async (html, dialogTitle, height) => {
+const _sharePDF = async (html, dialogTitle, height, width = THERMAL_WIDTH_PTS) => {
   const { uri } = await Print.printToFileAsync({
     html,
     base64: false,
-    width: 227,
+    width,
     height,
   });
   if (!(await Sharing.isAvailableAsync())) {
@@ -243,20 +565,20 @@ const calculateTransactionHeight = (transaction) => {
   const issueCount = transaction.issueItems?.length || 0;
   const receiptCount = transaction.receiptItems?.length || 0;
 
-  let h = 470; // fixed header/customer/payment/summary/footer content
-  if (issueCount > 0) h += 42 + (issueCount * 20);
-  if (receiptCount > 0) h += 42 + (receiptCount * 20);
+  let h = 620; // narrower 58mm paper needs more space for wrapping
+  if (issueCount > 0) h += 54 + (issueCount * 26);
+  if (receiptCount > 0) h += 54 + (receiptCount * 26);
   if (transaction.gstDetails?.isOn) h += 28;
-  if (transaction.description) h += 24;
+  if (transaction.description) h += 36;
 
-  return Math.min(Math.max(h, 560), 1100);
+  return Math.min(Math.max(h, 680), 1500);
 };
 
 export const PrintService = {
   printThermal: async (transaction, customTamilMsg) => {
     if (!acquire()) throw new Error('A print action is already in progress.');
     try {
-      const html = await generateHTML(transaction, true, customTamilMsg);
+      const html = await generateThermalReceiptHTML(transaction, customTamilMsg);
       const height = calculateTransactionHeight(transaction);
       await _printViaPDF(html, height);
     } finally {
@@ -269,7 +591,7 @@ export const PrintService = {
     try {
       const html = await generateHTML(transaction, false, customTamilMsg);
       // For A4, we don't specify height to use default A4 length
-      await _sharePDF(html, 'Print A4 Bill');
+      await _sharePDF(html, 'Print A4 Bill', undefined, 227);
     } finally {
       release();
     }
@@ -278,7 +600,7 @@ export const PrintService = {
   shareWhatsApp: async (transaction, customTamilMsg) => {
     if (!acquire()) throw new Error('A share action is already in progress.');
     try {
-      const html = await generateHTML(transaction, false, customTamilMsg);
+      const html = await generateThermalReceiptHTML(transaction, customTamilMsg);
       const height = calculateTransactionHeight(transaction);
       await _sharePDF(html, 'Share Bill via WhatsApp', height);
     } finally {
@@ -303,7 +625,7 @@ const generateSettlementHTML = async (settlement, originalBillNumber) => {
         <style>
           @page { size: 80mm auto; margin: 0; }
           body { margin: 0; padding: 0; width: 80mm; background: #fff; }
-          .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding-left: 2mm; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: 600; color: #000 !important; text-align: left; }
+          .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding: 0; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: 600; color: #000 !important; text-align: left; }
           .center { text-align: center; }
           .bold { font-weight: bold; }
           .divider { border-bottom: 1px dashed #000; margin: 4px 0; }
@@ -326,15 +648,15 @@ const generateSettlementHTML = async (settlement, originalBillNumber) => {
         <div class="divider"></div>
         <div class="bold">SETTLEMENT DETAILS</div>
         <div class="row"><div>Payment Mode:</div><div>${settlement.paymentMode}</div></div>
-        <div class="row"><div>Gold Rate:</div><div>₹${settlement.goldRateAtSettlement?.toLocaleString('en-IN') || '-'}</div></div>
-        <div class="row bold"><div>Amount Paid:</div><div>₹${settlement.amountPaid.toLocaleString('en-IN')}</div></div>
+        <div class="row"><div>Gold Rate:</div><div>\u20B9${settlement.goldRateAtSettlement?.toLocaleString('en-IN') || '-'}</div></div>
+        <div class="row bold"><div>Amount Paid:</div><div>\u20B9${settlement.amountPaid.toLocaleString('en-IN')}</div></div>
         <div class="row bold"><div>Gram Settled:</div><div>${settlement.gramSettled.toFixed(3)}g</div></div>
         ${settlement.description ? `<div class="row"><div>Desc:</div><div>${settlement.description}</div></div>` : ''}
         <div class="divider"></div>
         <div class="bold">BALANCE SUMMARY</div>
-        <div class="row"><div>Outstanding Before:</div><div>₹${settlement.outstandingBefore.toLocaleString('en-IN')}</div></div>
-        <div class="row"><div>Amount Paid:</div><div>- ₹${settlement.amountPaid.toLocaleString('en-IN')}</div></div>
-        <div class="row bold"><div>Outstanding After:</div><div>₹${settlement.outstandingAfter.toLocaleString('en-IN')}</div></div>
+        <div class="row"><div>Outstanding Before:</div><div>\u20B9${settlement.outstandingBefore.toLocaleString('en-IN')}</div></div>
+        <div class="row"><div>Amount Paid:</div><div>- \u20B9${settlement.amountPaid.toLocaleString('en-IN')}</div></div>
+        <div class="row bold"><div>Outstanding After:</div><div>\u20B9${settlement.outstandingAfter.toLocaleString('en-IN')}</div></div>
         <div class="row bold"><div>Status:</div><div>${settlement.outstandingAfter <= 0 ? 'PAID' : 'PARTIAL'}</div></div>
         <div class="footer">
           <p>${tamilMsg}</p>
@@ -400,7 +722,7 @@ const generateLineStockHTML = (transaction) => {
   const styles = `
     @page { size: 80mm auto; margin: 0; }
     body { margin: 0; padding: 0; width: 80mm; background: #fff; }
-    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding-left: 2mm; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: 600; color: #000 !important; text-align: left; }
+    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding: 0; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: 600; color: #000 !important; text-align: left; }
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .divider { border-bottom: 1px dashed #000; margin: 5px 0; }
@@ -533,7 +855,7 @@ const generateLineStockSettlementHTML = (settlement) => {
   const styles = `
     @page { size: 80mm auto; margin: 0; }
     body { margin: 0; padding: 0; width: 80mm; background: #fff; }
-    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding-left: 2mm; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: 600; color: #000 !important; text-align: left; }
+    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding: 0; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; font-size: 12px; font-weight: 600; color: #000 !important; text-align: left; }
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .divider { border-bottom: 1px dashed #000; margin: 5px 0; }

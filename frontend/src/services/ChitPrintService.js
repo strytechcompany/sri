@@ -53,8 +53,8 @@ const generateStatementHTML = (customer, transactions) => {
 
   const styles = `
     @page { size: 80mm auto; margin: 0; }
-    body { margin: 0; padding: 0; width: 80mm; background: #fff; }
-    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding-left: 2mm; box-sizing: border-box; font-family: monospace; font-size: 12px; font-weight: 600; color: #000; text-align: left; }
+    body { margin: 0; padding: 0; width: 80mm; background: #fff; display: flex; justify-content: center; align-items: flex-start; }
+    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; box-sizing: border-box; font-family: monospace; font-size: 12px; font-weight: 600; color: #000; text-align: left; }
     .center { text-align: center; }
     .right { text-align: right; }
     .bold { font-weight: bold; }
@@ -187,8 +187,8 @@ const generateReceiptHTML = (customer, transaction, tamilMsg = '') => {
 
   const styles = `
     @page { size: 80mm auto; margin: 0; }
-    body { margin: 0; padding: 0; width: 80mm; background: #fff; }
-    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; padding-left: 2mm; box-sizing: border-box; font-family: monospace; font-size: 12px; font-weight: 600; color: #000; text-align: left; }
+    body { margin: 0; padding: 0; width: 80mm; background: #fff; display: flex; justify-content: center; align-items: flex-start; }
+    .receipt-container { width: 75mm; margin: 0 auto; padding: 0; box-sizing: border-box; font-family: monospace; font-size: 12px; font-weight: 600; color: #000; text-align: left; }
     .center { text-align: center; }
     .bold { font-weight: bold; }
     .divider { border-bottom: 1px dashed #000; margin: 6px 0; }

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Counter = require('./Counter');
 
 const CustomerSchema = new mongoose.Schema(
   {
@@ -90,9 +91,78 @@ const CustomerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const CUSTOMER_CODE_PREFIXES = {
+  B2C: 'B2C',
+  B2B: 'B2B',
+  B2D: 'B2D',
+  LINE_STOCKER: 'LS',
+};
+
+const getCounterId = (customerType) => `customerCode:${customerType}`;
+
+const getMaxExistingSeq = async (customerType, prefix) => {
+  const last = await mongoose
+    .model('Customer')
+    .findOne(
+      { customerType, customerCode: { $regex: `^${prefix}\\d{5}$` } },
+      { customerCode: 1 }
+    )
+    .sort({ customerCode: -1 })
+    .lean();
+
+  if (!last?.customerCode) return 0;
+  const numPart = parseInt(last.customerCode.slice(prefix.length), 10);
+  return Number.isFinite(numPart) ? numPart : 0;
+};
+
+CustomerSchema.statics.initializeCounters = async function () {
+  const types = Object.keys(CUSTOMER_CODE_PREFIXES);
+  await Promise.all(types.map(async (customerType) => {
+    const prefix = CUSTOMER_CODE_PREFIXES[customerType];
+    const counterId = getCounterId(customerType);
+    const maxSeq = await getMaxExistingSeq(customerType, prefix);
+    const existing = await Counter.findById(counterId).lean();
+
+    if (!existing) {
+      await Counter.create({ _id: counterId, seq: maxSeq });
+      return;
+    }
+
+    if ((existing.seq || 0) < maxSeq) {
+      await Counter.updateOne({ _id: counterId }, { $set: { seq: maxSeq } });
+    }
+  }));
+};
+
+CustomerSchema.statics.generateCustomerCode = async function (customerType) {
+  const prefix = CUSTOMER_CODE_PREFIXES[customerType];
+  if (!prefix) {
+    throw new Error(`Unsupported customer type: ${customerType}`);
+  }
+
+  const counterId = getCounterId(customerType);
+  const maxAttempts = 25;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const counter = await Counter.findOneAndUpdate(
+      { _id: counterId },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    const seq = counter?.seq || 1;
+    const candidate = `${prefix}${String(seq).padStart(5, '0')}`;
+    const exists = await this.exists({ customerCode: candidate });
+
+    if (!exists) {
+      return candidate;
+    }
+  }
+
+  throw new Error(`Unable to generate unique customer code for ${customerType}`);
+};
+
 // Auto-generate customerCode per type: B2C00001, B2B00001, B2D00001
-// Uses find-last-and-increment instead of countDocuments to avoid duplicate
-// codes when orphaned or soft-deleted records exist.
 CustomerSchema.pre('save', async function (next) {
   // Enforce Balance Rule: A customer cannot have both Old Balance and Advance at the same time.
   const currentAdvance = this.advance || 0;
@@ -110,29 +180,10 @@ CustomerSchema.pre('save', async function (next) {
     this.oldBalance = 0;
   }
 
-  if (this.customerCode) return next(); // already assigned, skip
-
-  const typePrefix = this.customerType;
-  const prefix = typePrefix === 'LINE_STOCKER' ? 'LS' : typePrefix; // 'B2C' | 'B2B' | 'B2D' | 'LS'
-
   try {
-    // Find the document with the highest customerCode for this type
-    const last = await mongoose
-      .model('Customer')
-      .findOne(
-        { customerType: typePrefix, customerCode: { $regex: `^${prefix}\\d{5}$` } },
-        { customerCode: 1 }
-      )
-      .sort({ customerCode: -1 })
-      .lean();
-
-    let nextNum = 1;
-    if (last && last.customerCode) {
-      const numPart = parseInt(last.customerCode.slice(prefix.length), 10);
-      if (!isNaN(numPart)) nextNum = numPart + 1;
+    if (!this.customerCode) {
+      this.customerCode = await this.constructor.generateCustomerCode(this.customerType);
     }
-
-    this.customerCode = `${prefix}${String(nextNum).padStart(5, '0')}`;
     return next();
   } catch (err) {
     return next(err);

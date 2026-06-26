@@ -17,6 +17,7 @@ const expenseRoutes = require('./routes/expenseRoutes');
 const lineStockRoutes = require('./routes/lineStockRoutes');
 const settingRoutes = require('./routes/settingRoutes');
 const { loadUsers } = require('./services/authStore');
+const Customer = require('./models/Customer');
 
 dotenv.config();
 
@@ -61,6 +62,7 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     await connectDB();
+    await Customer.initializeCounters();
   } catch (error) {
     console.error(`[FATAL] MongoDB connection failed: ${error.message}`);
     console.error('[FATAL] Check MONGO_URI env var and MongoDB Atlas IP whitelist (add 0.0.0.0/0 for Render)');
@@ -88,15 +90,22 @@ const seedDatabase = async () => {
       console.log('Settings seeded');
     }
 
-    const superAdminExists = await User.findOne({ email: 'ragusuresh291@gmail.com' });
-    if (!superAdminExists) {
-      await User.create({
-        name: 'Ragunath S',
-        email: 'ragusuresh291@gmail.com',
-        password: '123456',
-        role: 'SuperAdmin',
-      });
-      console.log('Super Admin seeded: ragusuresh291@gmail.com');
+    const seedEmail = process.env.USER1_EMAIL?.toLowerCase().trim();
+    const seedPassword = process.env.USER1_PASSWORD;
+    const seedName = process.env.USER1_NAME || 'Super Admin';
+    const seedRole = process.env.USER1_ROLE || 'SuperAdmin';
+
+    if (seedEmail && seedPassword) {
+      const seedUserExists = await User.findOne({ email: seedEmail });
+      if (!seedUserExists) {
+        await User.create({
+          name: seedName,
+          email: seedEmail,
+          password: seedPassword,
+          role: seedRole,
+        });
+        console.log(`Seeded login user: ${seedEmail}`);
+      }
     }
 
     const goldRateExists = await GoldRate.findOne();
@@ -117,4 +126,3 @@ const seedDatabase = async () => {
     console.error('Seed Error:', error.message);
   }
 };
-

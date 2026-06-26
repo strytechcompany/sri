@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Alert,
   StatusBar,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { wakeServer } from '../services/api';
 import LoginOtpModal from '../components/LoginOtpModal';
@@ -23,21 +24,42 @@ const LIGHT_GRAY = '#F8F8F8';
 const BORDER = '#E8E0CC';
 const TEXT_DARK = '#1A1A1A';
 const TEXT_GRAY = '#888888';
+const AUTHORIZED_EMAIL = 'srivaishnavijewellers1@gmail.com';
+const AUTH_EMAIL_HINT = `Use the registered email: ${AUTHORIZED_EMAIL}`;
 
 export default function LoginScreen({ navigation }) {
   const { login, verifyOtp } = useAuth();
-  const [email, setEmail] = useState('ragusuresh291@gmail.com');
-  const [password, setPassword] = useState('123456');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
 
+  const resetForm = useCallback(() => {
+    setEmail('');
+    setPassword('');
+    setShowPassword(false);
+    setErrors({});
+    setOtpModalVisible(false);
+    setOtpLoading(false);
+    setLoading(false);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      resetForm();
+    }, [resetForm])
+  );
+
   const validate = () => {
     const newErrors = {};
     if (!email.trim()) newErrors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Enter a valid email';
+    else if (email.trim().toLowerCase() !== AUTHORIZED_EMAIL) {
+      newErrors.email = `Use ${AUTHORIZED_EMAIL} to sign in`;
+    }
     if (!password) newErrors.password = 'Password is required';
     else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
     setErrors(newErrors);
@@ -128,8 +150,11 @@ export default function LoginScreen({ navigation }) {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="off"
+              importantForAutofill="no"
             />
             {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
+            <Text style={styles.hintText}>{AUTH_EMAIL_HINT}</Text>
           </View>
 
           {/* Password */}
@@ -311,6 +336,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#E53E3E',
     marginTop: 4,
+    marginLeft: 2,
+  },
+  hintText: {
+    fontSize: 12,
+    color: TEXT_GRAY,
+    marginTop: 6,
     marginLeft: 2,
   },
   loginButton: {
