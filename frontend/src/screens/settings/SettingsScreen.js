@@ -105,6 +105,7 @@ export default function SettingsScreen({ navigation }) {
         <SectionHeader title="3. Bill Settings" />
         <View style={styles.section}>
           <SettingsRow icon="receipt" label="Print Formatting" onPress={() => openModal('Bill Settings', 'billSettings', [
+            { key: 'hsnCode', label: 'HSN Code (Jewellery)', type: 'text' },
             { key: 'tamilMessage', label: 'Default Tamil Message', type: 'text', multiline: true },
             { key: 'footerMessage', label: 'Default Footer Message', type: 'text', multiline: true },
             { key: 'printCopies', label: 'Default Print Copies', type: 'number' }

@@ -30,6 +30,7 @@ const SettingSchema = new mongoose.Schema({
     tamilMessage: { type: String, default: 'நீங்கள் வாங்கும் ஒவ்வொரு கிராம் தங்கமும், உங்கள் எதிர்காலத்தின் ஒளிமயமான சேமிப்பு.' },
     footerMessage: { type: String, default: 'Thank you for your business!' },
     printCopies: { type: Number, default: 1 },
+    hsnCode: { type: String, default: '7113' },
     prefixes: {
       b2c: { type: String, default: 'SVJ-B2C-' },
       b2b: { type: String, default: 'SVJ-B2B-' },

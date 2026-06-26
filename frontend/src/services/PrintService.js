@@ -281,8 +281,9 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
         <div class="bold">PAYMENT SUMMARY</div>
         ${row('Subtotal:', (issueTotalAmount - receiptTotalAmount).toLocaleString('en-IN', {maximumFractionDigits:2}))}
         ${gstDetails?.isOn ? `
-          ${row('CGST:', cgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
-          ${row('SGST:', sgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
+          ${gstDetails.hsnCode ? row('HSN Code:', escapeHtml(gstDetails.hsnCode)) : ''}
+          ${row(`CGST (${gstDetails.cgstPercent || ''}%):`, cgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
+          ${row(`SGST (${gstDetails.sgstPercent || ''}%):`, sgst.toLocaleString('en-IN', {maximumFractionDigits:2}))}
         ` : ''}
         ${row('FINAL AMOUNT:', `\u20B9${finalAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
         ${row('PAID:', `- \u20B9${collectedAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
@@ -503,8 +504,9 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
           <div class="section-title">SUMMARY</div>
           ${renderRow('Subtotal', `\u20B9${formatMoney(issueTotalAmount - receiptTotalAmount)}`)}
           ${gstDetails?.isOn ? `
-            ${renderRow('CGST', `\u20B9${formatMoney(cgst)}`)}
-            ${renderRow('SGST', `\u20B9${formatMoney(sgst)}`)}
+            ${gstDetails.hsnCode ? renderRow('HSN Code', escapeHtml(gstDetails.hsnCode)) : ''}
+            ${renderRow(`CGST (${gstDetails.cgstPercent || ''}%)`, `\u20B9${formatMoney(cgst)}`)}
+            ${renderRow(`SGST (${gstDetails.sgstPercent || ''}%)`, `\u20B9${formatMoney(sgst)}`)}
           ` : ''}
           ${renderRow('Final Amount', `\u20B9${formatMoney(finalAmount)}`)}
           ${renderRow('Paid', `- \u20B9${formatMoney(collectedAmount)}`)}

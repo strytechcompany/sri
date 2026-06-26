@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { customerAPI, stockAPI, transactionAPI } from '../../services/api';
+import { customerAPI, stockAPI, transactionAPI, settingsAPI } from '../../services/api';
 import { useDashboard } from '../../context/DashboardContext';
 import { useTransaction } from '../../context/TransactionContext';
 
@@ -73,6 +73,18 @@ export default function TransactionCalculationScreen({ navigation, route }) {
   const [gstOn, setGstOn] = useState(false);
   const [cgstPercent, setCgstPercent] = useState('1.5');
   const [sgstPercent, setSgstPercent] = useState('1.5');
+  const [hsnCode, setHsnCode] = useState('');
+
+  // Pre-fill HSN code from admin settings when GST is turned on
+  useEffect(() => {
+    if (!gstOn || hsnCode) return;
+    settingsAPI.getSettings()
+      .then(res => {
+        const hsn = res.data?.data?.billSettings?.hsnCode;
+        if (hsn) setHsnCode(hsn);
+      })
+      .catch(() => {});
+  }, [gstOn]);
 
   // Load customer & init gold rate
   useEffect(() => {
@@ -321,6 +333,11 @@ export default function TransactionCalculationScreen({ navigation, route }) {
       return;
     }
 
+    if (gstOn && !hsnCode.trim()) {
+      Alert.alert('HSN Code Required', 'Please enter the HSN code in the GST section before proceeding.');
+      return;
+    }
+
     let subtype = '';
     if (hasIssue && !hasReceipt && !hasPayment) subtype = 'ISSUE_ONLY';
     else if (!hasIssue && hasReceipt && !hasPayment) subtype = 'RECEIPT_ONLY';
@@ -347,6 +364,7 @@ export default function TransactionCalculationScreen({ navigation, route }) {
       },
       gstDetails: {
         isOn: gstOn,
+        hsnCode: hsnCode.trim(),
         cgstPercent: parseFloat(cgstPercent) || 0,
         sgstPercent: parseFloat(sgstPercent) || 0,
         cgstAmount: cgstVal,
@@ -652,13 +670,27 @@ export default function TransactionCalculationScreen({ navigation, route }) {
             <View style={styles.gstBox}>
               <View style={styles.gridRow}>
                 <View style={styles.gridItem}>
+                  <Text style={[styles.inputLabel, { color: '#D32F2F' }]}>HSN Code *</Text>
+                  <TextInput
+                    style={[styles.inputHighlight, !hsnCode.trim() && { borderColor: '#D32F2F' }]}
+                    value={hsnCode}
+                    onChangeText={setHsnCode}
+                    placeholder="e.g. 7113"
+                    autoCapitalize="none"
+                    keyboardType="default"
+                  />
+                </View>
+                <View style={styles.gridItem}>
                   <Text style={styles.inputLabel}>CGST %</Text>
                   <TextInput style={styles.input} keyboardType="numeric" value={cgstPercent} onChangeText={setCgstPercent} />
                 </View>
+              </View>
+              <View style={styles.gridRow}>
                 <View style={styles.gridItem}>
                   <Text style={styles.inputLabel}>SGST %</Text>
                   <TextInput style={styles.input} keyboardType="numeric" value={sgstPercent} onChangeText={setSgstPercent} />
                 </View>
+                <View style={styles.gridItem} />
               </View>
             </View>
           )}

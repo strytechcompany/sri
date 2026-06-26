@@ -219,8 +219,9 @@ export default function BillPreviewScreen({ navigation, route }) {
           {issueTotalAmount > 0 && <View style={styles.row}><Text style={styles.mono}>Issue Amount:</Text><Text style={styles.mono}>₹{issueTotalAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text></View>}
           {gstDetails?.isOn && issueTotalAmount > 0 && (
             <>
-              <View style={styles.row}><Text style={styles.mono}>CGST:</Text><Text style={styles.mono}>₹{gstDetails.cgstAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text></View>
-              <View style={styles.row}><Text style={styles.mono}>SGST:</Text><Text style={styles.mono}>₹{gstDetails.sgstAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text></View>
+              {gstDetails.hsnCode ? <View style={styles.row}><Text style={styles.mono}>HSN Code:</Text><Text style={styles.mono}>{gstDetails.hsnCode}</Text></View> : null}
+              <View style={styles.row}><Text style={styles.mono}>CGST ({gstDetails.cgstPercent}%):</Text><Text style={styles.mono}>₹{gstDetails.cgstAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text></View>
+              <View style={styles.row}><Text style={styles.mono}>SGST ({gstDetails.sgstPercent}%):</Text><Text style={styles.mono}>₹{gstDetails.sgstAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text></View>
             </>
           )}
           {receiptTotalAmount > 0 && <View style={styles.row}><Text style={styles.mono}>Receipt Amount:</Text><Text style={styles.mono}>- ₹{receiptTotalAmount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text></View>}
