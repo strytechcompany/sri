@@ -25,8 +25,6 @@ loadUsers();
 
 const app = express();
 
-connectDB();
-
 app.use(cors());
 app.use(express.json());
 
@@ -60,10 +58,22 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  await seedDatabase();
-});
+const startServer = async () => {
+  try {
+    await connectDB();
+  } catch (error) {
+    console.error(`[FATAL] MongoDB connection failed: ${error.message}`);
+    console.error('[FATAL] Check MONGO_URI env var and MongoDB Atlas IP whitelist (add 0.0.0.0/0 for Render)');
+    process.exit(1);
+  }
+
+  app.listen(PORT, async () => {
+    console.log(`Server running on port ${PORT}`);
+    await seedDatabase();
+  });
+};
+
+startServer();
 
 const seedDatabase = async () => {
   try {

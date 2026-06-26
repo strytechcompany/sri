@@ -33,8 +33,13 @@ const getUserById = (id) => {
   return users.find(u => u.id === id);
 };
 
-const verifyPassword = async (enteredPassword, storedHash) => {
-  return await bcrypt.compare(enteredPassword, storedHash);
+const verifyPassword = async (enteredPassword, storedValue) => {
+  // .env stores plain text (e.g. USER1_PASSWORD=123456); bcrypt hashes start with $2b$/$2a$
+  const isBcryptHash = /^\$2[aby]\$/.test(storedValue);
+  if (isBcryptHash) {
+    return await bcrypt.compare(enteredPassword, storedValue);
+  }
+  return enteredPassword === storedValue;
 };
 
 // Memory store for OTPs

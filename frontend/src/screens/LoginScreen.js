@@ -13,6 +13,7 @@ import {
   StatusBar,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { wakeServer } from '../services/api';
 import LoginOtpModal from '../components/LoginOtpModal';
 
 const GOLD = '#D4AF37';
@@ -47,21 +48,25 @@ export default function LoginScreen({ navigation }) {
     if (!validate()) return;
     setLoading(true);
     try {
+      await wakeServer();
       const res = await login(email.trim().toLowerCase(), password);
       if (res.requires_otp) {
         setOtpModalVisible(true);
       }
     } catch (error) {
+      console.error('[Login] error:', error?.code, error?.message, error?.response?.data);
+
       let title = 'Login Failed';
       let message;
 
       if (error?.message === 'Network Error' || error?.code === 'ECONNREFUSED' || error?.code === 'ERR_NETWORK') {
         title = 'Cannot Connect to Server';
         message =
-          'Make sure:\n\n1. Backend server is running (npm run dev)\n2. Phone and PC are on the same WiFi\n3. Server IP is correct\n\nError: ' + (error?.message || 'Network Error');
+          'The cloud server could not be reached.\n\nThis usually means:\n1. The server is still waking up — wait 30 seconds and try again\n2. Your internet connection is off\n3. The Render service is down\n\nError: ' +
+          (error?.message || 'Network Error');
       } else if (error?.code === 'ECONNABORTED') {
         title = 'Connection Timeout';
-        message = 'Server took too long to respond. Check if backend is running.';
+        message = 'The server took too long to respond. It may still be starting up — please try again in 30 seconds.';
       } else {
         message = error?.response?.data?.message || error?.message || 'An unexpected error occurred.';
       }

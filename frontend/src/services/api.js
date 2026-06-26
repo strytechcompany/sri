@@ -4,9 +4,26 @@ import API_BASE_URL from '../config';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 60s — allows Render free tier cold start (~30–50s)
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
 });
+
+// Pings /api/health to wake Render from sleep before the real login request.
+// Render free tier can take 30-90s cold start; this absorbs that wait transparently.
+export const wakeServer = async () => {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await axios.get(`${API_BASE_URL}/health`, { timeout: 90000 });
+      console.log('[API] Server is awake');
+      return true;
+    } catch (err) {
+      console.log(`[API] Wake attempt ${attempt}/3 failed: ${err.message}`);
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 4000));
+    }
+  }
+  console.warn('[API] Server did not respond to health ping — proceeding anyway');
+  return false;
+};
 
 api.interceptors.request.use(
   async (config) => {

@@ -1,5 +1,4 @@
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const authStore = require('../services/authStore');
 const LoginAudit = require('../models/LoginAudit');
@@ -43,26 +42,32 @@ const login = async (req, res) => {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const device = req.headers['user-agent'] || 'Unknown';
 
+    console.log(`[AUTH] Login attempt | email=${email} ip=${ipAddress}`);
+
     if (!email || !password) {
+      console.log(`[AUTH] Missing credentials | email=${email}`);
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
     const identifier = `${ipAddress}_${email.toLowerCase()}`;
     if (authStore.isRateLimited(identifier)) {
+      console.log(`[AUTH] Rate limited | identifier=${identifier}`);
       return res.status(429).json({ success: false, message: 'Too many attempts. Locked out for 15 minutes.' });
     }
 
     const user = authStore.getUserByEmail(email);
 
     if (!user) {
-      await LoginAudit.create({ email, ipAddress, device, status: 'Failed - Unauthorized Email' });
+      console.log(`[AUTH] Unknown email | email=${email}`);
+      try { await LoginAudit.create({ email, ipAddress, device, status: 'Failed - Unauthorized Email' }); } catch (_) {}
       authStore.incrementRateLimit(identifier);
       return res.status(401).json({ success: false, message: 'User not authorized' });
     }
 
     const isMatch = await authStore.verifyPassword(password, user.password);
+    console.log(`[AUTH] Password check | email=${email} match=${isMatch}`);
     if (!isMatch) {
-      await LoginAudit.create({ email, ipAddress, device, status: 'Failed - Invalid Password' });
+      try { await LoginAudit.create({ email, ipAddress, device, status: 'Failed - Invalid Password' }); } catch (_) {}
       authStore.incrementRateLimit(identifier);
       return res.status(401).json({ success: false, message: 'Invalid password' });
     }
@@ -70,8 +75,8 @@ const login = async (req, res) => {
     // Passwords match -> Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     authStore.setOtp(email, otp);
-    
-    // Send OTP
+    console.log(`[AUTH] OTP generated | email=${email}`);
+
     await sendOTPEmail(user.email, otp);
 
     return res.status(200).json({
@@ -81,7 +86,7 @@ const login = async (req, res) => {
       email: user.email
     });
   } catch (error) {
-    console.error('Login Error:', error.message);
+    console.error('[AUTH] Login Error:', error.message, error.stack);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
