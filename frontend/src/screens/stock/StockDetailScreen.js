@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
 import { useStock } from '../../context/StockContext';
 
 const GOLD = '#D4AF37';
@@ -58,6 +59,53 @@ export default function StockDetailScreen({ navigation, route }) {
       Alert.alert('Error', 'Failed to load item details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePrintLabel = async () => {
+    const barcode = item.barcode || item.itemNumber;
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    @page { size: 3in 1.5in; margin: 0; }
+    body {
+      width: 3in; height: 1.5in;
+      font-family: Arial, sans-serif;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 4px;
+    }
+    .shop  { font-size: 9pt; font-weight: bold; letter-spacing: 0.5px; }
+    .meta  { font-size: 7pt; color: #333; margin: 1px 0; }
+    .bc    { margin: 3px 0; }
+    .bc svg { width: 2.7in; height: 36px; }
+    .num   { font-size: 8pt; font-weight: bold; letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+  <div class="shop">Sri Vaishnavi Jewellers</div>
+  <div class="meta">${item.designName}  |  ${item.purity}</div>
+  <div class="meta">Net: ${Number(item.netWeight).toFixed(3)} g  |  Gross: ${Number(item.grossWeight).toFixed(3)} g</div>
+  <div class="bc"><svg id="bc"></svg></div>
+  <div class="num">${item.itemNumber}</div>
+  <script>
+    JsBarcode('#bc', '${barcode}', {
+      format: 'CODE128', width: 1.4, height: 36,
+      displayValue: false, margin: 0
+    });
+  </script>
+</body>
+</html>`;
+    try {
+      await Print.printAsync({ html });
+    } catch (err) {
+      if (!err?.message?.toLowerCase().includes('cancel')) {
+        Alert.alert('Print Error', err?.message || 'Could not open print dialog.');
+      }
     }
   };
 
@@ -235,6 +283,15 @@ export default function StockDetailScreen({ navigation, route }) {
 
         {/* ─── Action Buttons ─── */}
         <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={styles.printBtn}
+            onPress={handlePrintLabel}
+            activeOpacity={0.85}
+          >
+            <MaterialCommunityIcons name="barcode" size={18} color={HEADER_BG} />
+            <Text style={styles.printBtnText}>Print Label</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.deleteBtn, deleting && styles.btnDisabled]}
             onPress={handleDelete}
@@ -428,6 +485,22 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   editBtnText: { color: HEADER_BG, fontSize: 15, fontWeight: '800' },
+  printBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: GOLD,
+    borderRadius: 16,
+    paddingVertical: 15,
+    gap: 8,
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  printBtnText: { color: HEADER_BG, fontSize: 15, fontWeight: '800' },
   deleteBtn: {
     flex: 1,
     flexDirection: 'row',
