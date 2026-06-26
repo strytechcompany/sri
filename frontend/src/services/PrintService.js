@@ -159,11 +159,10 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
     }
     th { border-bottom: 1px dashed #000; font-weight: 700; }
     .amt-col { text-align: right; }
-    .bill-col { width: 18%; }
-    .item-col { width: 34%; }
-    .weight-col { width: 16%; }
+    .item-col { width: 42%; }
+    .weight-col { width: 20%; }
     .purity-col { width: 14%; }
-    .amount-col { width: 18%; text-align: right; }
+    .amount-col { width: 24%; text-align: right; }
     .rate-banner {
       width: 100%;
       text-align: center;
@@ -181,10 +180,9 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
   issueItems.forEach(item => {
     issueRows += `
       <tr>
-        <td class="bill-col">${item.billNo || '-'}</td>
         <td class="item-col">${item.itemName || '-'}</td>
         <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-        <td class="purity-col">${item.purity ?? '-'}</td>
+        <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
         <td class="amount-col">${Number(item.amount || 0).toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
       </tr>
     `;
@@ -194,10 +192,9 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
   receiptItems.forEach(item => {
     receiptRows += `
       <tr>
-        <td class="bill-col">${item.billNo || '-'}</td>
         <td class="item-col">${item.receiptType || '-'}</td>
         <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-        <td class="purity-col">${item.purity ?? '-'}</td>
+        <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
         <td class="amount-col">${Number(item.amount || 0).toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
       </tr>
     `;
@@ -225,6 +222,7 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
         <div class="divider"></div>
 
         ${row('Txn No:', _id.slice(-6).toUpperCase())}
+        ${transaction.commonBillNo ? row('Bill No:', escapeHtml(transaction.commonBillNo)) : ''}
         ${row('Date/Time:', `${dateStr} ${timeStr}`)}
 
         <div class="divider"></div>
@@ -245,7 +243,7 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
           <div class="bold">ISSUED PRODUCTS</div>
           <table>
             <thead>
-              <tr><th>Bill No</th><th>Item</th><th>Wt(g)</th><th>Purity</th><th class="amt-col">Amt(\u20B9)</th></tr>
+              <tr><th>Item</th><th>Wt(g)</th><th>Purity</th><th class="amt-col">Amt(\u20B9)</th></tr>
             </thead>
             <tbody>${issueRows}</tbody>
           </table>
@@ -259,7 +257,7 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
           <div class="bold">RECEIVED ITEMS</div>
           <table>
             <thead>
-              <tr><th>Bill No</th><th>Type</th><th>Wt(g)</th><th>Less</th><th>Purity</th><th class="amt-col">Amt(\u20B9)</th></tr>
+              <tr><th>Type</th><th>Wt(g)</th><th>Purity</th><th class="amt-col">Amt(\u20B9)</th></tr>
             </thead>
             <tbody>${receiptRows}</tbody>
           </table>
@@ -355,22 +353,22 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
   const collectedAmount = paymentMode === 'Gold' ? goldConvertedAmount : (paymentDetails?.amount || 0);
   const balanceDue = Math.max(0, finalAmount - collectedAmount);
 
+  const commonBillNo = transaction.commonBillNo || '';
+
   const issueRows = issueItems.map((item) => `
     <tr>
-      <td class="bill-col">${escapeHtml(item.billNo || '-')}</td>
       <td class="item-col">${escapeHtml(item.itemName || '-')}</td>
       <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-      <td class="purity-col">${escapeHtml(item.purity ?? '-')}</td>
+      <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
       <td class="amount-col">${formatMoney(item.amount)}</td>
     </tr>
   `).join('');
 
   const receiptRows = receiptItems.map((item) => `
     <tr>
-      <td class="bill-col">${escapeHtml(item.billNo || '-')}</td>
       <td class="item-col">${escapeHtml(item.receiptType || '-')}</td>
       <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-      <td class="purity-col">${escapeHtml(item.purity ?? '-')}</td>
+      <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
       <td class="amount-col">${formatMoney(item.amount)}</td>
     </tr>
   `).join('');
@@ -417,11 +415,10 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
           table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 3px 0; font-size: 11px; }
           th, td { padding: 2px 0; vertical-align: top; word-break: break-word; }
           th { text-align: left; border-bottom: 1px dashed #000; font-weight: 700; }
-          .bill-col { width: 18%; }
-          .item-col { width: 34%; }
-          .weight-col { width: 16%; }
+          .item-col { width: 42%; }
+          .weight-col { width: 20%; }
           .purity-col { width: 14%; }
-          .amount-col { width: 18%; text-align: right; }
+          .amount-col { width: 24%; text-align: right; }
           .footer { text-align: center; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
           .right { text-align: right; }
         </style>
@@ -439,6 +436,7 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
           <hr class="divider" />
 
           ${renderRow('Txn No:', escapeHtml(txnNo))}
+          ${commonBillNo ? renderRow('Bill No:', escapeHtml(commonBillNo)) : ''}
           ${renderRow('Date:', escapeHtml(dateStr))}
           ${renderRow('Time:', escapeHtml(timeStr))}
 
@@ -459,11 +457,10 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
             <table>
               <thead>
                 <tr>
-                  <th class="bill-col">Bill No</th>
                   <th class="item-col">Item</th>
-                  <th class="weight-col">Weight(g)</th>
+                  <th class="weight-col">Wt(g)</th>
                   <th class="purity-col">Purity</th>
-                  <th class="amount-col">Amount</th>
+                  <th class="amount-col">Amt(\u20B9)</th>
                 </tr>
               </thead>
               <tbody>${issueRows}</tbody>
@@ -479,11 +476,10 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
             <table>
               <thead>
                 <tr>
-                  <th class="bill-col">Bill No</th>
                   <th class="item-col">Item</th>
-                  <th class="weight-col">Weight(g)</th>
+                  <th class="weight-col">Wt(g)</th>
                   <th class="purity-col">Purity</th>
-                  <th class="amount-col">Amount</th>
+                  <th class="amount-col">Amt(\u20B9)</th>
                 </tr>
               </thead>
               <tbody>${receiptRows}</tbody>

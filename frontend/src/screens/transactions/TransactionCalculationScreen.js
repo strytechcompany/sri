@@ -69,11 +69,23 @@ export default function TransactionCalculationScreen({ navigation, route }) {
   // Description
   const [description, setDescription] = useState('');
 
+  // Common Bill No
+  const [commonBillNo, setCommonBillNo] = useState('');
+
   // GST
   const [gstOn, setGstOn] = useState(false);
   const [cgstPercent, setCgstPercent] = useState('1.5');
   const [sgstPercent, setSgstPercent] = useState('1.5');
   const [hsnCode, setHsnCode] = useState('');
+
+  // Auto-generate a common bill number on mount
+  useEffect(() => {
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const datePart = `${now.getFullYear().toString().slice(-2)}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    const seq = Math.floor(Math.random() * 900) + 100;
+    setCommonBillNo(`${(type || 'BILL').toUpperCase()}-${datePart}-${seq}`);
+  }, []);
 
   // Pre-fill HSN code from admin settings when GST is turned on
   useEffect(() => {
@@ -196,7 +208,6 @@ export default function TransactionCalculationScreen({ navigation, route }) {
     const newItem = {
       id: Date.now().toString(),
       stockId: issueStockId || null,
-      billNo: `ISS-${Date.now().toString().slice(-4)}`,
       itemNumber: issueItemNo || 'N/A',
       itemName: issueItemName || 'Manual Entry',
       weight: parseFloat(issueWeight),
@@ -238,7 +249,6 @@ export default function TransactionCalculationScreen({ navigation, route }) {
     }
     const newItem = {
       id: Date.now().toString(),
-      billNo: `REC-${Date.now().toString().slice(-4)}`,
       receiptType,
       weight: parseFloat(receiptWeight) || 0,
       less: parseFloat(receiptLess) || 0,
@@ -350,6 +360,7 @@ export default function TransactionCalculationScreen({ navigation, route }) {
     const payload = {
       transactionType: type,
       transactionSubtype: subtype,
+      commonBillNo: commonBillNo.trim(),
       customerId: customer._id,
       customer: { // Pass customer details for preview
         customerName: customer.customerName,
@@ -448,15 +459,28 @@ export default function TransactionCalculationScreen({ navigation, route }) {
             </View>
           </View>
 
-          {/* Editable Gold Rate */}
+          {/* Gold Rate + Bill No */}
           <View style={{ marginTop: 12, borderTopWidth: 1, borderColor: '#E5D8C0', paddingTop: 12 }}>
-            <Text style={styles.inputLabel}>Current Gold Rate (₹) [Editable]</Text>
-            <TextInput 
-              style={styles.inputHighlight} 
-              keyboardType="numeric" 
-              value={globalGoldRate} 
-              onChangeText={setGlobalGoldRate} 
-            />
+            <View style={styles.gridRow}>
+              <View style={styles.gridItem}>
+                <Text style={styles.inputLabel}>Gold Rate (₹) [Editable]</Text>
+                <TextInput
+                  style={styles.inputHighlight}
+                  keyboardType="numeric"
+                  value={globalGoldRate}
+                  onChangeText={setGlobalGoldRate}
+                />
+              </View>
+              <View style={styles.gridItem}>
+                <Text style={styles.inputLabel}>Bill No</Text>
+                <TextInput
+                  style={styles.inputHighlight}
+                  value={commonBillNo}
+                  onChangeText={setCommonBillNo}
+                  autoCapitalize="characters"
+                />
+              </View>
+            </View>
           </View>
         </View>
 

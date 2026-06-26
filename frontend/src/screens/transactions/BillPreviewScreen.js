@@ -98,7 +98,8 @@ export default function BillPreviewScreen({ navigation, route }) {
     paymentMode, paymentDetails, description,
     issueTotalWeight, issueTotalAmount, receiptTotalWeight, receiptTotalAmount,
     finalAmount, goldRate, goldPaymentWeight, goldPaymentPurity, goldConvertedAmount,
-    oldBalanceBefore, oldBalanceAfter, advanceBalanceBefore, advanceBalanceAfter, convertedGram, gstDetails
+    oldBalanceBefore, oldBalanceAfter, advanceBalanceBefore, advanceBalanceAfter, convertedGram, gstDetails,
+    commonBillNo,
   } = transaction;
 
   const dateStr = new Date(createdAt).toLocaleDateString('en-GB');
@@ -130,7 +131,10 @@ export default function BillPreviewScreen({ navigation, route }) {
           <Text style={styles.divider}>--------------------------------</Text>
 
           <View style={[styles.row, {alignItems: 'flex-start'}]}>
-            <Text style={styles.mono}>Txn No: {_id ? _id.slice(-6).toUpperCase() : 'PENDING'}</Text>
+            <View>
+              <Text style={styles.mono}>Txn No: {_id ? _id.slice(-6).toUpperCase() : 'PENDING'}</Text>
+              {commonBillNo ? <Text style={[styles.mono, {fontWeight: 'bold'}]}>Bill No: {commonBillNo}</Text> : null}
+            </View>
             <View style={{alignItems: 'flex-end'}}>
               <Text style={styles.mono}>{dateStr}</Text>
               <Text style={styles.mono}>{timeStr}</Text>
@@ -154,20 +158,19 @@ export default function BillPreviewScreen({ navigation, route }) {
               <Text style={styles.divider}>--------------------------------</Text>
               <Text style={styles.sectionTitle}>ISSUED PRODUCTS</Text>
               <View style={styles.tableHeader}>
-                <Text style={[styles.th, {flex: 2}]}>Item</Text>
-                <Text style={[styles.th, {flex: 1.5}]}>Wt(g)</Text>
-                <Text style={[styles.th, {flex: 2, textAlign: 'right'}]}>Amt(₹)</Text>
+                <Text style={[styles.th, {flex: 2.5}]}>Item</Text>
+                <Text style={[styles.th, {flex: 1.2}]}>Wt(g)</Text>
+                <Text style={[styles.th, {flex: 1}]}>Purity</Text>
+                <Text style={[styles.th, {flex: 1.5, textAlign: 'right'}]}>Amt(₹)</Text>
               </View>
               {issueItems.map((item, index) => (
-                <View key={item._id || index} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 4}}>
+                <View key={item._id || index} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 3}}>
                   <View style={styles.tr}>
-                    <Text style={[styles.td, {flex: 2}]}>{item.itemName}</Text>
-                    <Text style={[styles.td, {flex: 1.5}]}>{item.weight.toFixed(3)}</Text>
-                    <Text style={[styles.td, {flex: 2, textAlign: 'right'}]}>{item.amount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text>
+                    <Text style={[styles.td, {flex: 2.5}]}>{item.itemName || item.itemNumber || '-'}</Text>
+                    <Text style={[styles.td, {flex: 1.2}]}>{Number(item.weight).toFixed(3)}</Text>
+                    <Text style={[styles.td, {flex: 1}]}>{Number(item.purity).toFixed(2)}</Text>
+                    <Text style={[styles.td, {flex: 1.5, textAlign: 'right'}]}>{Number(item.amount).toLocaleString('en-IN', {maximumFractionDigits:2})}</Text>
                   </View>
-                  <Text style={{fontSize: 10, fontFamily: 'monospace', color: '#555', marginTop: 2}}>
-                    No: {item.itemNumber || '-'} | Bill: {item.billNo || '-'} | {item.purity}K
-                  </Text>
                 </View>
               ))}
               <Text style={styles.dividerDotted}>................................</Text>
@@ -181,20 +184,19 @@ export default function BillPreviewScreen({ navigation, route }) {
               <Text style={styles.divider}>--------------------------------</Text>
               <Text style={styles.sectionTitle}>RECEIVED ITEMS</Text>
               <View style={styles.tableHeader}>
-                <Text style={[styles.th, {flex: 2}]}>Type</Text>
-                <Text style={[styles.th, {flex: 1.5}]}>Wt(g)</Text>
-                <Text style={[styles.th, {flex: 2, textAlign: 'right'}]}>Amt(₹)</Text>
+                <Text style={[styles.th, {flex: 2.5}]}>Type</Text>
+                <Text style={[styles.th, {flex: 1.2}]}>Wt(g)</Text>
+                <Text style={[styles.th, {flex: 1}]}>Purity</Text>
+                <Text style={[styles.th, {flex: 1.5, textAlign: 'right'}]}>Amt(₹)</Text>
               </View>
               {receiptItems.map((item, index) => (
-                <View key={item._id || index} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 4}}>
+                <View key={item._id || index} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 3}}>
                   <View style={styles.tr}>
-                    <Text style={[styles.td, {flex: 2}]}>{item.receiptType}</Text>
-                    <Text style={[styles.td, {flex: 1.5}]}>{item.weight.toFixed(3)}</Text>
-                    <Text style={[styles.td, {flex: 2, textAlign: 'right'}]}>{item.amount.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text>
+                    <Text style={[styles.td, {flex: 2.5}]}>{item.receiptType || '-'}</Text>
+                    <Text style={[styles.td, {flex: 1.2}]}>{Number(item.weight).toFixed(3)}</Text>
+                    <Text style={[styles.td, {flex: 1}]}>{Number(item.purity).toFixed(2)}</Text>
+                    <Text style={[styles.td, {flex: 1.5, textAlign: 'right'}]}>{Number(item.amount).toLocaleString('en-IN', {maximumFractionDigits:2})}</Text>
                   </View>
-                  <Text style={{fontSize: 10, fontFamily: 'monospace', color: '#555', marginTop: 2}}>
-                    Bill: {item.billNo || '-'} | Purity: {item.purity}K
-                  </Text>
                 </View>
               ))}
               <Text style={styles.dividerDotted}>................................</Text>
