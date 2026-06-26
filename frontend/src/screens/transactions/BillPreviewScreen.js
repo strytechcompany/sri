@@ -158,8 +158,8 @@ export default function BillPreviewScreen({ navigation, route }) {
                 <Text style={[styles.th, {flex: 1.5}]}>Wt(g)</Text>
                 <Text style={[styles.th, {flex: 2, textAlign: 'right'}]}>Amt(₹)</Text>
               </View>
-              {issueItems.map(item => (
-                <View key={item._id} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 4}}>
+              {issueItems.map((item, index) => (
+                <View key={item._id || index} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 4}}>
                   <View style={styles.tr}>
                     <Text style={[styles.td, {flex: 2}]}>{item.itemName}</Text>
                     <Text style={[styles.td, {flex: 1.5}]}>{item.weight.toFixed(3)}</Text>
@@ -185,8 +185,8 @@ export default function BillPreviewScreen({ navigation, route }) {
                 <Text style={[styles.th, {flex: 1.5}]}>Wt(g)</Text>
                 <Text style={[styles.th, {flex: 2, textAlign: 'right'}]}>Amt(₹)</Text>
               </View>
-              {receiptItems.map(item => (
-                <View key={item._id} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 4}}>
+              {receiptItems.map((item, index) => (
+                <View key={item._id || index} style={{borderBottomWidth: 1, borderColor: '#EEE', paddingVertical: 4}}>
                   <View style={styles.tr}>
                     <Text style={[styles.td, {flex: 2}]}>{item.receiptType}</Text>
                     <Text style={[styles.td, {flex: 1.5}]}>{item.weight.toFixed(3)}</Text>
@@ -366,32 +366,67 @@ export default function BillPreviewScreen({ navigation, route }) {
       {/* Sticky Bottom Actions */}
       <View style={styles.actionsContainer}>
         {isPreviewMode ? (
-          <TouchableOpacity 
-            style={[styles.saveBtn, saving && {opacity: 0.7}]} 
-            onPress={async () => {
-              if (saving) return;
-              setSaving(true);
-              try {
-                const res = await transactionAPI.create(transaction);
-                if (res.data.success) {
-                  Alert.alert('Success', 'Transaction Saved Successfully');
-                  navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+          <View style={styles.actionsBar}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#2E7D32' }, (saving || printing || sharing) && { opacity: 0.6 }]}
+              disabled={saving || printing || sharing}
+              onPress={async () => {
+                if (saving) return;
+                setSaving(true);
+                try {
+                  const res = await transactionAPI.create(transaction);
+                  if (res.data.success) {
+                    Alert.alert('Success', 'Transaction Saved Successfully');
+                    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+                  }
+                } catch (err) {
+                  console.error(err);
+                  Alert.alert('Error', 'Failed to save transaction.');
+                } finally {
+                  setSaving(false);
                 }
-              } catch (err) {
-                console.error(err);
-                Alert.alert('Error', 'Failed to save transaction.');
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? <ActivityIndicator color="#FFF" /> : (
-              <>
-                <MaterialCommunityIcons name="content-save" size={20} color="#FFF" />
-                <Text style={styles.actionText}>Save Bill</Text>
-              </>
-            )}
-          </TouchableOpacity>
+              }}
+            >
+              {saving ? <ActivityIndicator size="small" color="#FFF" /> : (
+                <>
+                  <MaterialCommunityIcons name="content-save" size={18} color="#FFF" />
+                  <Text style={styles.actionText}>Save</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, (printing || sharing || saving) && { opacity: 0.6 }]}
+              disabled={printing || sharing || saving}
+              onPress={() => withPrintLock(setPrinting, () =>
+                PrintService.printThermal(
+                  { ...transaction, createdAt: transaction.createdAt || new Date().toISOString() },
+                  tamilMsg
+                )
+              )}
+            >
+              {printing
+                ? <ActivityIndicator size="small" color="#FFF" />
+                : <MaterialCommunityIcons name="printer-pos" size={18} color="#FFF" />}
+              <Text style={styles.actionText}>{printing ? 'Printing…' : 'Print'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#25D366' }, (printing || sharing || saving) && { opacity: 0.6 }]}
+              disabled={printing || sharing || saving}
+              onPress={() => withPrintLock(setSharing, () =>
+                PrintService.shareWhatsApp(
+                  { ...transaction, createdAt: transaction.createdAt || new Date().toISOString() },
+                  tamilMsg
+                )
+              )}
+            >
+              {sharing
+                ? <ActivityIndicator size="small" color="#FFF" />
+                : <MaterialCommunityIcons name="whatsapp" size={18} color="#FFF" />}
+              <Text style={styles.actionText}>{sharing ? 'Sharing…' : 'WhatsApp'}</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.actionsBar}>
             <TouchableOpacity 
