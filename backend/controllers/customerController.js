@@ -66,12 +66,12 @@ exports.createCustomer = async (req, res) => {
       throw new Error('Unable to create customer after multiple code retries');
     };
 
-    await saveWithCodeRetry();
+    const savedCustomer = await saveWithCodeRetry();
 
     res.status(201).json({
       success: true,
       message: 'Customer created successfully',
-      data: customer,
+      data: savedCustomer,
     });
   } catch (error) {
     if (error.name === 'ValidationError') {
@@ -79,6 +79,19 @@ exports.createCustomer = async (req, res) => {
       return res.status(400).json({ success: false, message: messages.join(', ') });
     }
     if (error.code === 11000) {
+      const duplicateField = Object.keys(error.keyPattern || {})[0] || Object.keys(error.keyValue || {})[0];
+      if (duplicateField === 'customerName') {
+        return res.status(409).json({
+          success: false,
+          message: 'Customer with the same name and shop name already exists.',
+        });
+      }
+      if (duplicateField === 'customerId') {
+        return res.status(409).json({
+          success: false,
+          message: 'A legacy customer index conflict was detected. Please restart the server and try again.',
+        });
+      }
       return res.status(409).json({
         success: false,
         message: 'Customer code already exists. Please try again.',

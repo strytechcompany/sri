@@ -58,10 +58,28 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const LEGACY_CUSTOMER_INDEXES = ['customerId_1', 'customerName_1_shopName_1'];
+
+const dropLegacyCustomerIndexes = async () => {
+  try {
+    const indexes = await Customer.collection.indexes();
+    const names = new Set(indexes.map((index) => index.name));
+
+    for (const indexName of LEGACY_CUSTOMER_INDEXES) {
+      if (names.has(indexName)) {
+        await Customer.collection.dropIndex(indexName);
+        console.log(`[Customer] Dropped legacy index: ${indexName}`);
+      }
+    }
+  } catch (error) {
+    console.warn(`[Customer] Unable to normalize indexes: ${error.message}`);
+  }
+};
 
 const startServer = async () => {
   try {
     await connectDB();
+    await dropLegacyCustomerIndexes();
     await Customer.initializeCounters();
   } catch (error) {
     console.error(`[FATAL] MongoDB connection failed: ${error.message}`);
