@@ -33,6 +33,7 @@ export default function TransactionCalculationScreen({ navigation, route }) {
   const [stockResults, setStockResults] = useState([]);
   const [showStockDropdown, setShowStockDropdown] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [scannerTorch, setScannerTorch] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   // Issue Section
@@ -93,17 +94,18 @@ export default function TransactionCalculationScreen({ navigation, route }) {
   // Handle Stock Dropdown Search
   useEffect(() => {
     const searchStock = async () => {
-      if (!stockQuery) {
+      const query = stockQuery.trim();
+      if (!query) {
         setStockResults([]);
         return;
       }
       try {
-        const res = await stockAPI.getAll({ search: stockQuery });
+        const res = await stockAPI.getAll({ search: query });
         if (res.data.success) {
           // Flatten the grouped design format to a simple list
           const flatList = [];
-          res.data.data.forEach(group => {
-            group.records.forEach(item => flatList.push(item));
+          (res.data.data || []).forEach(group => {
+            (group.records || []).forEach(item => flatList.push(item));
           });
           setStockResults(flatList.slice(0, 10)); // max 10 results
         }
@@ -126,6 +128,28 @@ export default function TransactionCalculationScreen({ navigation, route }) {
     setIssueSRIBill('');
     setIssueAmountOverride('');
   };
+
+  const handleStockLookup = useCallback(async (rawValue) => {
+    const query = (rawValue || '').trim();
+    if (!query) {
+      setStockResults([]);
+      setShowStockDropdown(false);
+      return;
+    }
+
+    setStockQuery(query);
+    setShowStockDropdown(true);
+
+    try {
+      const exactRes = await stockAPI.getByBarcode(query);
+      if (exactRes?.data?.success && exactRes.data.data) {
+        selectStockItem(exactRes.data.data);
+        return;
+      }
+    } catch {
+      // Fall back to the normal search dropdown when the code is not an exact barcode.
+    }
+  }, [selectStockItem]);
 
   // --- Calculations for Issue ---
   const currentIssuePlus = useMemo(() => {
@@ -423,15 +447,19 @@ export default function TransactionCalculationScreen({ navigation, route }) {
           <Text style={styles.cardTitle}>Issue Product</Text>
           
           <View style={{zIndex: 100}}>
-            <Text style={styles.inputLabel}>Enter Barcode to Search Stock</Text>
+            <Text style={styles.inputLabel}>Enter QR Code to Search Stock</Text>
             <View style={styles.barcodeRow}>
               <TextInput
                 style={styles.barcodeInput}
-                placeholder="Search barcode, design..."
+                placeholder="Search QR, design..."
                 placeholderTextColor="#999"
                 value={stockQuery}
                 onChangeText={(t) => { setStockQuery(t); setShowStockDropdown(true); }}
                 onFocus={() => setShowStockDropdown(true)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                onSubmitEditing={() => handleStockLookup(stockQuery)}
               />
               <TouchableOpacity style={styles.scanBtn} onPress={async () => {
                 if (!cameraPermission?.granted) {
@@ -693,10 +721,48 @@ export default function TransactionCalculationScreen({ navigation, route }) {
             />
           </View>
 
-          <TouchableOpacity style={styles.actionBtn} onPress={handleCollectPayment}>
-            <Text style={styles.actionBtnText}>Collect Payment</Text>
+          <TouchableOpacity
+            style={[styles.actionBtn, confirmedPayment.amount > 0 && styles.actionBtnConfirmed]}
+            onPress={handleCollectPayment}
+          >
+            <MaterialCommunityIcons
+              name={confirmedPayment.amount > 0 ? 'check-circle-outline' : 'cash-check'}
+              size={18}
+              color={confirmedPayment.amount > 0 ? '#FFF' : DARK_BROWN}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.actionBtnText, confirmedPayment.amount > 0 && { color: '#FFF' }]}>
+              {confirmedPayment.amount > 0 ? 'Update Payment' : 'Collect Payment'}
+            </Text>
           </TouchableOpacity>
         </View>
+
+        {/* Confirmed Payment Card */}
+        {confirmedPayment.amount > 0 && (
+          <View style={styles.paymentConfirmedCard}>
+            <View style={styles.paymentConfirmedLeft}>
+              <View style={styles.paymentConfirmedIcon}>
+                <MaterialCommunityIcons name="cash-check" size={22} color="#2E7D32" />
+              </View>
+              <View style={styles.listTextCol}>
+                <Text style={styles.paymentConfirmedTitle}>
+                  {confirmedPayment.mode} — Collected
+                </Text>
+                <Text style={styles.paymentConfirmedSub}>
+                  ₹{confirmedPayment.amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                  {'  |  '}
+                  {confirmedPayment.grams.toFixed(3)} g
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setConfirmedPayment({ amount: 0, grams: 0, mode: '' })}
+              style={styles.paymentDeleteBtn}
+            >
+              <MaterialCommunityIcons name="trash-can-outline" size={22} color="#D32F2F" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Live Payment Summary & Balances */}
         <View style={[styles.summaryCard, {backgroundColor: '#FAFAFA', borderColor: '#E5D8C0', zIndex: -4}]}>
@@ -788,22 +854,29 @@ export default function TransactionCalculationScreen({ navigation, route }) {
           <View style={{ flex: 1, backgroundColor: '#000' }}>
             <CameraView
               style={{ flex: 1 }}
-              barcodeScannerSettings={{ barcodeTypes: ["qr", "ean13", "ean8", "code128", "code39", "upc_a", "upc_e"] }}
+              facing="back"
+              enableTorch={scannerTorch}
+              barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
               onBarcodeScanned={({ data }) => {
-                setStockQuery(data);
                 setIsScanning(false);
-                setShowStockDropdown(true);
+                setScannerTorch(false);
+                handleStockLookup(data);
               }}
             >
               <View style={styles.scannerOverlay}>
                 <View style={styles.scannerHeader}>
-                  <Text style={styles.scannerTitle}>Scan Barcode</Text>
-                  <TouchableOpacity onPress={() => setIsScanning(false)} style={styles.scannerClose}>
-                    <MaterialCommunityIcons name="close" size={28} color="#FFF" />
-                  </TouchableOpacity>
+                  <Text style={styles.scannerTitle}>Scan QR Code</Text>
+                  <View style={styles.scannerActions}>
+                    <TouchableOpacity onPress={() => setScannerTorch((prev) => !prev)} style={styles.scannerAction}>
+                      <MaterialCommunityIcons name={scannerTorch ? 'flashlight' : 'flashlight-off'} size={22} color="#FFF" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setScannerTorch(false); setIsScanning(false); }} style={styles.scannerClose}>
+                      <MaterialCommunityIcons name="close" size={28} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 <View style={styles.scannerFrame} />
-                <Text style={styles.scannerInstructions}>Position barcode inside the frame</Text>
+                <Text style={styles.scannerInstructions}>Position QR code inside the frame</Text>
               </View>
             </CameraView>
           </View>
@@ -843,8 +916,15 @@ const styles = StyleSheet.create({
   inputDisabled: { backgroundColor: '#EEEEEE', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8, paddingHorizontal: 12, height: 40, color: '#666', fontWeight: '600' },
   inputHighlight: { backgroundColor: '#FFF9E6', borderWidth: 1, borderColor: GOLD, borderRadius: 8, paddingHorizontal: 12, height: 40, color: DARK_BROWN, fontWeight: '700' },
   calcValue: { fontSize: 16, color: DARK_BROWN, fontWeight: '800', marginTop: 8 },
-  actionBtn: { backgroundColor: GOLD, borderRadius: 8, height: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  actionBtn: { backgroundColor: GOLD, borderRadius: 8, height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  actionBtnConfirmed: { backgroundColor: '#2E7D32' },
   actionBtnText: { color: DARK_BROWN, fontWeight: '800', fontSize: 14 },
+  paymentConfirmedCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F1F8F1', borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1.5, borderColor: '#A5D6A7', elevation: 2 },
+  paymentConfirmedLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  paymentConfirmedIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#C8E6C9', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  paymentConfirmedTitle: { fontSize: 14, color: '#1B5E20', fontWeight: '700' },
+  paymentConfirmedSub: { fontSize: 12, color: '#388E3C', marginTop: 2, fontWeight: '600' },
+  paymentDeleteBtn: { padding: 6 },
   listItem: { flexDirection: 'row', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12, marginBottom: 8, alignItems: 'center', elevation: 2, borderWidth: 1, borderColor: '#F5EFE6' },
   listTextCol: { flex: 1 },
   listTitle: { fontSize: 14, color: DARK_BROWN, fontWeight: '700' },
@@ -866,7 +946,9 @@ const styles = StyleSheet.create({
   scannerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   scannerHeader: { position: 'absolute', top: 50, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   scannerTitle: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  scannerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  scannerAction: { padding: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20 },
   scannerClose: { padding: 8, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 20 },
-  scannerFrame: { width: 250, height: 150, borderWidth: 2, borderColor: GOLD, backgroundColor: 'transparent' },
+  scannerFrame: { width: 220, height: 130, borderWidth: 2, borderColor: GOLD, backgroundColor: 'transparent' },
   scannerInstructions: { color: '#FFF', marginTop: 30, fontSize: 16, backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
 });
