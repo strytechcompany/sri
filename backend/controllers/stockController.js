@@ -6,6 +6,7 @@ exports.createStock = async (req, res) => {
     const {
       designName,
       itemName,
+      serialNumber,
       supplierName,
       category,
       purity,
@@ -17,7 +18,18 @@ exports.createStock = async (req, res) => {
       barcode,
     } = req.body;
 
+    if (!serialNumber || !serialNumber.trim()) {
+      return res.status(400).json({ success: false, message: 'Serial Number is required.' });
+    }
+
+    const snTrimmed = serialNumber.trim();
+    const duplicate = await Stock.findOne({ serialNumber: snTrimmed });
+    if (duplicate) {
+      return res.status(400).json({ success: false, message: `Serial Number "${snTrimmed}" already exists. Use a unique Serial Number.` });
+    }
+
     const stock = new Stock({
+      serialNumber: snTrimmed,
       designName,
       itemName: itemName?.trim() || '',
       supplierName,
@@ -76,7 +88,8 @@ exports.getAllStock = async (req, res) => {
         { itemNumber: regex },
         { category: regex },
         { itemName: regex },
-        { barcode: regex }
+        { barcode: regex },
+        { serialNumber: regex },
       ];
     }
 
@@ -211,6 +224,7 @@ exports.getStockByBarcode = async (req, res) => {
           $or: [
             { barcode: pattern },
             { itemNumber: pattern },
+            { serialNumber: pattern },
           ],
         });
         if (stock) return stock;
@@ -244,6 +258,7 @@ exports.updateStock = async (req, res) => {
     const {
       designName,
       itemName,
+      serialNumber,
       supplierName,
       category,
       purity,
@@ -257,6 +272,15 @@ exports.updateStock = async (req, res) => {
     const stock = await Stock.findOne({ _id: req.params.id, isActive: true });
     if (!stock) {
       return res.status(404).json({ success: false, message: 'Stock item not found' });
+    }
+
+    if (serialNumber !== undefined && serialNumber?.trim()) {
+      const snTrimmed = serialNumber.trim();
+      const duplicate = await Stock.findOne({ serialNumber: snTrimmed, _id: { $ne: req.params.id } });
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: `Serial Number "${snTrimmed}" already exists. Use a unique Serial Number.` });
+      }
+      stock.serialNumber = snTrimmed;
     }
 
     if (designName !== undefined) stock.designName = designName;

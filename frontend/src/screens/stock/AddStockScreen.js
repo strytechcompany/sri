@@ -86,6 +86,8 @@ export default function AddStockScreen({ navigation, route }) {
   const [purity, setPurity] = useState(editItem?.purity ?? '');
   const [buyingTouch, setBuyingTouch] = useState(editItem?.buyingTouch?.toString() ?? '');
   const [quantity, setQuantity] = useState(editItem?.quantity?.toString() ?? '1');
+  const [serialNumber, setSerialNumber] = useState(editItem?.serialNumber ?? '');
+  const [serialNumberError, setSerialNumberError] = useState('');
   const [notes, setNotes] = useState(editItem?.notes ?? '');
   const [barcode, setBarcode] = useState(editItem?.barcode ?? '');
   const [printing, setPrinting] = useState(false);
@@ -129,6 +131,11 @@ export default function AddStockScreen({ navigation, route }) {
 
   // ─── Validate & Save ──────────────────────────────────────────────────────
   const handleSave = async () => {
+    if (!serialNumber.trim()) {
+      setSerialNumberError('Serial Number is required.');
+      return Alert.alert('Validation', 'Serial Number is required.');
+    }
+    setSerialNumberError('');
     if (!designName.trim()) return Alert.alert('Validation', 'Design Name is required.');
     if (!category) return Alert.alert('Validation', 'Please select a Category.');
     if (!purity) return Alert.alert('Validation', 'Please select a Purity.');
@@ -147,6 +154,7 @@ export default function AddStockScreen({ navigation, route }) {
       }
 
       const payload = {
+        serialNumber: serialNumber.trim(),
         designName: designName.trim(),
         itemName: itemName.trim(),
         supplierName: supplierName.trim(),
@@ -230,6 +238,24 @@ export default function AddStockScreen({ navigation, route }) {
               </View>
             </View>
           )}
+
+          {/* Serial Number */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Serial Number *</Text>
+            <TextInput
+              style={[styles.input, serialNumberError ? styles.inputError : null]}
+              value={serialNumber}
+              onChangeText={(t) => { setSerialNumber(t); if (serialNumberError) setSerialNumberError(''); }}
+              placeholder="e.g. Thali 1g, Chain 2g, Ring 3g"
+              placeholderTextColor="#B09878"
+              autoCapitalize="words"
+            />
+            {serialNumberError ? (
+              <Text style={styles.errorNote}>{serialNumberError}</Text>
+            ) : (
+              <Text style={styles.autoNote}>Unique identifier — e.g. "Thali 1g", "Chain 2g"</Text>
+            )}
+          </View>
 
           {/* Category */}
           <ChipGroup
@@ -568,6 +594,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 5,
     fontStyle: 'italic',
+  },
+  inputError: {
+    borderColor: '#C0392B',
+    borderWidth: 1.5,
+  },
+  errorNote: {
+    fontSize: 11,
+    color: '#C0392B',
+    fontWeight: '600',
+    marginTop: 5,
   },
   printBtn: {
     flexDirection: 'row',

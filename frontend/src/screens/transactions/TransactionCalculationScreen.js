@@ -578,7 +578,7 @@ export default function TransactionCalculationScreen({ navigation, route }) {
             <View style={styles.barcodeRow}>
               <TextInput
                 style={styles.barcodeInput}
-                placeholder="Search QR, design..."
+                placeholder="Search by Serial No, Item Name, Barcode..."
                 placeholderTextColor="#999"
                 value={stockQuery}
                 onChangeText={(t) => { setStockQuery(t); setShowStockDropdown(true); }}
@@ -606,8 +606,21 @@ export default function TransactionCalculationScreen({ navigation, route }) {
               <View style={styles.dropdown}>
                 {stockResults.map(s => (
                   <TouchableOpacity key={s._id} style={styles.dropItem} onPress={() => selectStockItem(s)}>
-                    <Text style={styles.dropItemText}>
-                      {s.itemNumber} | {s.itemName || s.designName} | {s.netWeight}g
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                      <Text style={[styles.dropItemText, { fontWeight: '800', fontSize: 13 }]}>
+                        {s.serialNumber || s.itemNumber}
+                      </Text>
+                      <View style={{ backgroundColor: s.quantity > 0 ? '#E8F5E9' : '#FDECEA', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: s.quantity > 0 ? '#2E7D32' : '#C0392B' }}>
+                          Qty: {s.quantity}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={{ fontSize: 11, color: '#555', marginBottom: 2 }}>
+                      {s.itemName || s.designName}  ·  {s.category}  ·  {s.purity}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#888' }}>
+                      Barcode: {s.barcode}  ·  Wt: {s.netWeight}g
                     </Text>
                   </TouchableOpacity>
                 ))}

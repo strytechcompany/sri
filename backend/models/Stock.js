@@ -17,6 +17,12 @@ const StockSchema = new mongoose.Schema(
       required: [true, 'Design name is required'],
       trim: true,
     },
+    serialNumber: {
+      type: String,
+      trim: true,
+      sparse: true,
+      unique: true,
+    },
     itemName: {
       type: String,
       trim: true,
