@@ -53,17 +53,20 @@ export const DashboardProvider = ({ children }) => {
     }
   }, []);
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = useCallback(async ({ retry = true } = {}) => {
     setLoading(true);
     setError(null);
     try {
       await Promise.all([fetchGoldRate(), fetchRecentIssued(), fetchExpenseSummary()]);
     } catch (err) {
       setError(err.message);
+      if (retry) {
+        setTimeout(() => fetchDashboardData({ retry: true }), 10000);
+      }
     } finally {
       setLoading(false);
     }
-  }, [fetchGoldRate, fetchRecentIssued]);
+  }, [fetchGoldRate, fetchRecentIssued, fetchExpenseSummary]);
 
   return (
     <DashboardContext.Provider

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authAPI } from '../services/api';
+import { authAPI, wakeServer } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -11,6 +11,8 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Kick off server wake immediately so Render is ready before any API call
+    wakeServer().catch(() => {});
     loadStoredAuth();
 
     const subscription = DeviceEventEmitter.addListener('session_expired', () => {

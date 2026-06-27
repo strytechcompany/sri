@@ -8,9 +8,10 @@ const SettingsContext = createContext();
 export function SettingsProvider({ children }) {
   const { token } = useAuth();
   const [settings, setSettings] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const fetchSettings = async () => {
+  const fetchSettings = async ({ retry = true } = {}) => {
+    setLoading(true);
     try {
       const res = await settingsAPI.getSettings();
       if (res.data && res.data.data) {
@@ -18,6 +19,9 @@ export function SettingsProvider({ children }) {
       }
     } catch (error) {
       console.error('Failed to fetch global settings:', error);
+      if (retry) {
+        setTimeout(() => fetchSettings({ retry: true }), 10000);
+      }
     } finally {
       setLoading(false);
     }
