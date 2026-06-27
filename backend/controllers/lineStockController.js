@@ -122,23 +122,17 @@ exports.issueStock = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No products selected for issue' });
     }
 
+    // Phase 1: validate stock availability and fetch all stock docs (no writes yet)
     let totalGram = 0;
     let totalItems = 0;
+    const stockUpdates = [];
 
-    // Validate and reduce stock
     for (const item of issuedProducts) {
       const stock = await Stock.findById(item.stockId);
       if (!stock || stock.quantity < item.count) {
         return res.status(400).json({ success: false, message: `Insufficient stock for item ${item.itemName}` });
       }
-      
-      // Reduce stock
-      stock.quantity -= item.count;
-      if (stock.quantity === 0) {
-        stock.isAvailable = false;
-      }
-      await stock.save();
-
+      stockUpdates.push({ stock, count: item.count });
       totalGram += parseFloat(item.weight);
       totalItems += parseInt(item.count);
     }
@@ -146,11 +140,7 @@ exports.issueStock = async (req, res) => {
     const oldBalanceBefore = customer.oldBalance;
     const oldBalanceAfter = oldBalanceBefore + totalGram;
 
-    // Update Customer Old Balance
-    customer.oldBalance = oldBalanceAfter;
-    await customer.save();
-
-    // Create Line Stock Transaction
+    // Phase 2: validate transaction document before touching any stock/customer
     const transaction = new LineStockTransaction({
       customerId,
       issueDate: issueDate || new Date(),
@@ -162,8 +152,21 @@ exports.issueStock = async (req, res) => {
       description,
       issuedProducts,
       status: 'ACTIVE',
+      issuedBy: req.user.name || req.user.email,
       createdBy: req.user._id,
     });
+
+    await transaction.validate();
+
+    // Phase 3: all checks passed — now write stock, customer, transaction
+    for (const { stock, count } of stockUpdates) {
+      stock.quantity -= count;
+      if (stock.quantity === 0) stock.isAvailable = false;
+      await stock.save();
+    }
+
+    customer.oldBalance = oldBalanceAfter;
+    await customer.save();
 
     await transaction.save();
 
