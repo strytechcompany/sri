@@ -148,7 +148,7 @@ const seedDatabase = async () => {
     const superAdminEmail = 'srivaishnavijewellers1@gmail.com';
     let superAdmin = await User.findOne({ email: superAdminEmail });
     if (!superAdmin) {
-      const initialPassword = 'SVJAdmin@2024';
+      const initialPassword = '123456';
       await User.create({
         name: 'Svjadmin',
         email: superAdminEmail,
