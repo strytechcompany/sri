@@ -143,6 +143,9 @@ const sendOTPEmail = async (email, otp, name = 'User', type = 'login') => {
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 10000,
     });
 
     const subject = type === 'forgot-password'
@@ -205,7 +208,10 @@ const login = async (req, res) => {
     authStore.setOtp(email, otp);
     console.log(`[AUTH] OTP generated | email=${email}`);
 
-    await sendOTPEmail(user.email, otp, user.name, 'login');
+    // Fire-and-forget: don't block the HTTP response waiting for SMTP
+    sendOTPEmail(user.email, otp, user.name, 'login').catch(err =>
+      console.error('[AUTH] OTP email failed:', err.message)
+    );
 
     return res.status(200).json({
       success: true,
@@ -353,7 +359,9 @@ const forgotPassword = async (req, res) => {
     // Use a namespaced key so forgot-password OTPs never collide with login OTPs
     authStore.setOtp(`forgot::${email.toLowerCase().trim()}`, otp);
 
-    await sendOTPEmail(user.email, otp, user.name, 'forgot-password');
+    sendOTPEmail(user.email, otp, user.name, 'forgot-password').catch(err =>
+      console.error('[AUTH] Forgot-password OTP email failed:', err.message)
+    );
 
     return res.status(200).json({ success: true, message: 'OTP sent to your email address' });
   } catch (error) {
