@@ -15,7 +15,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { authAPI } from '../services/api';
+import { authAPI, wakeServer } from '../services/api';
 
 const GOLD = '#D4AF37';
 const DARK_BROWN = '#3D2200';
@@ -41,6 +41,7 @@ export default function ForgotPasswordModal({ visible, onClose }) {
   const [showNewPwd, setShowNewPwd]         = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
   const [loading, setLoading]               = useState(false);
+  const [wakeStatus, setWakeStatus]         = useState(null);
   const submitRef                           = useRef(false);
 
   const reset = () => {
@@ -53,6 +54,7 @@ export default function ForgotPasswordModal({ visible, onClose }) {
     setShowNewPwd(false);
     setShowConfirmPwd(false);
     setLoading(false);
+    setWakeStatus(null);
     submitRef.current = false;
   };
 
@@ -68,6 +70,8 @@ export default function ForgotPasswordModal({ visible, onClose }) {
     submitRef.current = true;
     setLoading(true);
     try {
+      await wakeServer(setWakeStatus);
+      setWakeStatus(null);
       await authAPI.forgotPassword(emailTrimmed);
       setEmail(emailTrimmed);
       setStep(2);
@@ -171,6 +175,9 @@ export default function ForgotPasswordModal({ visible, onClose }) {
           ? <ActivityIndicator color="#FFF" size="small" />
           : <Text style={styles.primaryBtnText}>Send OTP</Text>}
       </TouchableOpacity>
+      {!!wakeStatus && (
+        <Text style={styles.wakeStatusText}>{wakeStatus}</Text>
+      )}
     </>
   );
 
@@ -465,4 +472,5 @@ const styles = StyleSheet.create({
   },
   backLink: { marginTop: 14, alignSelf: 'flex-start' },
   linkText: { fontSize: 13, color: DARK_BROWN, fontWeight: '700' },
+  wakeStatusText: { textAlign: 'center', fontSize: 12, color: '#888', marginTop: 8 },
 });

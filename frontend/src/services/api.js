@@ -9,18 +9,29 @@ const api = axios.create({
 });
 
 // Pings /api/health to wake Render from sleep before the real login request.
-// Render free tier can take 30-90s cold start; this absorbs that wait transparently.
-export const wakeServer = async () => {
-  for (let attempt = 1; attempt <= 3; attempt++) {
+// Render free tier cold start can take 30-90s; fast-check first, then show a
+// status message so the user knows why it's slow.
+export const wakeServer = async (onStatus) => {
+  try {
+    await axios.get(`${API_BASE_URL}/health`, { timeout: 8000 });
+    console.log('[API] Server is awake (fast)');
+    return true;
+  } catch {
+    // Server is sleeping — notify the user and retry with a longer timeout
+    onStatus?.('Server is starting up, please wait...');
+  }
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      await axios.get(`${API_BASE_URL}/health`, { timeout: 90000 });
+      await axios.get(`${API_BASE_URL}/health`, { timeout: 60000 });
       console.log('[API] Server is awake');
+      onStatus?.(null);
       return true;
     } catch (err) {
-      console.log(`[API] Wake attempt ${attempt}/3 failed: ${err.message}`);
-      if (attempt < 3) await new Promise((r) => setTimeout(r, 4000));
+      console.log(`[API] Wake attempt ${attempt}/2 failed: ${err.message}`);
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 3000));
     }
   }
+  onStatus?.(null);
   console.warn('[API] Server did not respond to health ping — proceeding anyway');
   return false;
 };

@@ -32,6 +32,7 @@ export default function LoginScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [wakeStatus, setWakeStatus] = useState(null);
   const [errors, setErrors] = useState({});
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -67,7 +68,8 @@ export default function LoginScreen({ navigation }) {
     if (!validate()) return;
     setLoading(true);
     try {
-      await wakeServer();
+      await wakeServer(setWakeStatus);
+      setWakeStatus(null);
       const res = await login(email.trim().toLowerCase(), password);
       if (res.requires_otp) {
         setOtpModalVisible(true);
@@ -194,6 +196,9 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.loginButtonText}>Sign In</Text>
             )}
           </TouchableOpacity>
+          {!!wakeStatus && (
+            <Text style={styles.wakeStatusText}>{wakeStatus}</Text>
+          )}
 
           {/* Forgot Password */}
           <TouchableOpacity
@@ -367,6 +372,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  wakeStatusText: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: GOLD_DARK,
+    marginTop: 8,
   },
   forgotButton: {
     alignItems: 'center',
