@@ -55,6 +55,38 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+app.get('/api/test-email', async (req, res) => {
+  const nodemailer = require('nodemailer');
+  const result = {
+    env: {
+      BREVO_SMTP_USER: process.env.BREVO_SMTP_USER ? '✓ set' : '✗ missing',
+      BREVO_SMTP_PASS: process.env.BREVO_SMTP_PASS ? '✓ set' : '✗ missing',
+      EMAIL_USER: process.env.EMAIL_USER || '✗ missing',
+    },
+  };
+  try {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
+      auth: { user: process.env.BREVO_SMTP_USER, pass: process.env.BREVO_SMTP_PASS },
+    });
+    await transporter.verify();
+    result.smtpVerify = '✓ connected';
+    const info = await transporter.sendMail({
+      from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
+      to: process.env.EMAIL_USER,
+      subject: 'Render Test Email',
+      text: 'OTP email is working from Render!',
+    });
+    result.emailSent = '✓ sent';
+    result.messageId = info.messageId;
+  } catch (err) {
+    result.error = err.message;
+  }
+  res.json(result);
+});
+
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
