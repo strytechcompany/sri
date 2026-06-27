@@ -9,10 +9,12 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCustomer } from '../../context/CustomerContext';
+import { useAuth } from '../../context/AuthContext';
 
 const GOLD = '#D4AF37';
 const DARK_BROWN = '#5C3A00';
@@ -62,6 +64,14 @@ export default function CustomerDetailScreen({ navigation, route }) {
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  const { user: authUser } = useAuth();
+  const isAdmin = authUser?.role === 'SuperAdmin' || authUser?.role === 'Admin';
+
+  const [editingBill, setEditingBill] = useState(null);
+  const [editItems, setEditItems] = useState([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [deletingBillId, setDeletingBillId] = useState(null);
+
   useEffect(() => { loadCustomer(); }, [customerId]);
 
   const loadCustomer = async () => {
@@ -82,6 +92,99 @@ export default function CustomerDetailScreen({ navigation, route }) {
       loadHistory();
     }
   }, [activeTab, customer]);
+
+  const handleEditBill = (bill) => {
+    const items = (bill.issueItems || []).map(item => ({
+      ...item,
+      originalCount: item.count || 1,
+      unitWeight: (item.count || 1) > 0 ? (item.weight || 0) / (item.count || 1) : 0,
+      unitAmount: (item.count || 1) > 0 ? (item.amount || 0) / (item.count || 1) : 0,
+      unitPurity: (item.count || 1) > 0 ? (item.purity || 0) / (item.count || 1) : 0,
+    }));
+    setEditItems(items);
+    setEditingBill(bill);
+  };
+
+  const handleEditItemCount = (idx, delta) => {
+    setEditItems(prev => prev.map((item, i) => {
+      if (i !== idx) return item;
+      const newCount = Math.max(1, (item.count || 1) + delta);
+      return {
+        ...item,
+        count: newCount,
+        weight: parseFloat((item.unitWeight * newCount).toFixed(3)),
+        amount: parseFloat((item.unitAmount * newCount).toFixed(2)),
+        purity: parseFloat((item.unitPurity * newCount).toFixed(3)),
+      };
+    }));
+  };
+
+  const handleRemoveEditItem = (idx) => {
+    if (editItems.length <= 1) {
+      Alert.alert('Cannot Remove', 'At least one item must remain in the bill.');
+      return;
+    }
+    setEditItems(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingBill || editItems.length === 0) return;
+    setEditSaving(true);
+    try {
+      const { transactionAPI } = require('../../services/api');
+      const newIssueItems = editItems.map(item => ({
+        stockId: item.stockId,
+        billNo: item.billNo,
+        itemNumber: item.itemNumber,
+        itemName: item.itemName,
+        weight: item.weight,
+        count: item.count,
+        sriCost: item.sriCost,
+        sriBill: item.sriBill,
+        plus: item.plus,
+        purity: item.purity,
+        amount: item.amount,
+      }));
+      await transactionAPI.update(editingBill._id, { newIssueItems });
+      setEditingBill(null);
+      setEditItems([]);
+      setHistory([]);
+      await loadHistory();
+      await loadCustomer();
+      Alert.alert('Success', 'Bill updated successfully.');
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.message || 'Failed to update bill.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteBill = (bill) => {
+    Alert.alert(
+      'Delete Bill',
+      `Delete bill #${bill._id.slice(-6).toUpperCase()}?\n\nAll sold items will be restored to stock. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            setDeletingBillId(bill._id);
+            try {
+              const { transactionAPI } = require('../../services/api');
+              await transactionAPI.delete(bill._id);
+              setHistory(prev => prev.filter(h => h._id !== bill._id));
+              await loadCustomer();
+              Alert.alert('Deleted', 'Bill deleted and stock restored.');
+            } catch (e) {
+              Alert.alert('Error', e.response?.data?.message || 'Failed to delete bill.');
+            } finally {
+              setDeletingBillId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const loadHistory = async () => {
     try {
@@ -411,20 +514,46 @@ export default function CustomerDetailScreen({ navigation, route }) {
                         </View>
                       </View>
                     ) : (
-                      <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:4, borderTopWidth:1, borderColor:'#EEE', paddingTop:6}}>
-                        <View>
-                          <Text style={{fontSize:10, color:'#888'}}>Subtotal</Text>
-                          <Text style={{fontSize:12, fontWeight:'bold', color:'#333'}}>₹{finalVal.toLocaleString('en-IN')}</Text>
+                      <>
+                        <View style={{flexDirection:'row', justifyContent:'space-between', marginTop:4, borderTopWidth:1, borderColor:'#EEE', paddingTop:6}}>
+                          <View>
+                            <Text style={{fontSize:10, color:'#888'}}>Subtotal</Text>
+                            <Text style={{fontSize:12, fontWeight:'bold', color:'#333'}}>₹{finalVal.toLocaleString('en-IN')}</Text>
+                          </View>
+                          <View>
+                            <Text style={{fontSize:10, color:'#888'}}>Collected</Text>
+                            <Text style={{fontSize:12, fontWeight:'bold', color:'#2E7D32'}}>₹{collected.toLocaleString('en-IN')}</Text>
+                          </View>
+                          <View style={{alignItems:'flex-end'}}>
+                            <Text style={{fontSize:10, color:'#888'}}>Outstanding</Text>
+                            <Text style={{fontSize:13, fontWeight:'bold', color: outstanding > 0 ? '#D32F2F' : '#2E7D32'}}>₹{outstanding.toLocaleString('en-IN')}</Text>
+                          </View>
                         </View>
-                        <View>
-                          <Text style={{fontSize:10, color:'#888'}}>Collected</Text>
-                          <Text style={{fontSize:12, fontWeight:'bold', color:'#2E7D32'}}>₹{collected.toLocaleString('en-IN')}</Text>
-                        </View>
-                        <View style={{alignItems:'flex-end'}}>
-                          <Text style={{fontSize:10, color:'#888'}}>Outstanding</Text>
-                          <Text style={{fontSize:13, fontWeight:'bold', color: outstanding > 0 ? '#D32F2F' : '#2E7D32'}}>₹{outstanding.toLocaleString('en-IN')}</Text>
-                        </View>
-                      </View>
+                        {isAdmin && item.historyType === 'BILL' && (
+                          <View style={styles.billActionRow}>
+                            <TouchableOpacity
+                              style={styles.billEditBtn}
+                              onPress={() => handleEditBill(item)}
+                            >
+                              <MaterialCommunityIcons name="pencil-outline" size={14} color={DARK_BROWN} />
+                              <Text style={styles.billEditBtnText}>Edit</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.billDeleteBtn, deletingBillId === item._id && { opacity: 0.5 }]}
+                              onPress={() => handleDeleteBill(item)}
+                              disabled={deletingBillId === item._id}
+                            >
+                              {deletingBillId === item._id
+                                ? <ActivityIndicator size="small" color="#FFF" />
+                                : <>
+                                    <MaterialCommunityIcons name="trash-can-outline" size={14} color="#FFF" />
+                                    <Text style={styles.billDeleteBtnText}>Delete</Text>
+                                  </>
+                              }
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </>
                     )}
                   </TouchableOpacity>
                 );
@@ -433,6 +562,133 @@ export default function CustomerDetailScreen({ navigation, route }) {
           </View>
         )}
       </ScrollView>
+
+      {/* ── Edit Bill Modal ──────────────────────────────────────── */}
+      <Modal
+        visible={!!editingBill}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { setEditingBill(null); setEditItems([]); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Edit Bill #{editingBill?._id?.slice(-6).toUpperCase()}
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => { setEditingBill(null); setEditItems([]); }}
+              >
+                <MaterialCommunityIcons name="close" size={18} color={DARK_BROWN} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+              {editItems.map((item, idx) => (
+                <View key={idx} style={styles.editItemCard}>
+                  <Text style={styles.editItemName}>{item.itemName || item.category || 'Item'}</Text>
+                  <Text style={styles.editItemSub}>{item.itemNumber} {item.billNo ? `· ${item.billNo}` : ''}</Text>
+                  <View style={styles.editItemRow}>
+                    <View style={styles.editItemMeta}>
+                      <View>
+                        <Text style={styles.editMetaLabel}>Weight</Text>
+                        <Text style={styles.editMetaValue}>{(item.weight || 0).toFixed(3)}g</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.editMetaLabel}>Amount</Text>
+                        <Text style={styles.editMetaValue}>₹{(item.amount || 0).toLocaleString('en-IN')}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.editCountRow}>
+                      <TouchableOpacity
+                        style={styles.editCountBtn}
+                        onPress={() => handleEditItemCount(idx, -1)}
+                        disabled={item.count <= 1}
+                      >
+                        <MaterialCommunityIcons name="minus" size={16} color={GOLD} />
+                      </TouchableOpacity>
+                      <Text style={styles.editCountText}>{item.count}</Text>
+                      <TouchableOpacity
+                        style={styles.editCountBtn}
+                        onPress={() => handleEditItemCount(idx, 1)}
+                      >
+                        <MaterialCommunityIcons name="plus" size={16} color={GOLD} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.editRemoveBtn}
+                        onPress={() => handleRemoveEditItem(idx)}
+                      >
+                        <MaterialCommunityIcons name="delete-outline" size={16} color="#C0392B" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+              {/* Recalculated totals */}
+              {(() => {
+                const totalAmt = editItems.reduce((s, i) => s + (i.amount || 0), 0);
+                const totalWt = editItems.reduce((s, i) => s + (i.weight || 0), 0);
+                const gst = editingBill?.gstDetails?.isOn
+                  ? totalAmt * ((editingBill.gstDetails.cgstPercent || 0) + (editingBill.gstDetails.sgstPercent || 0)) / 100
+                  : 0;
+                const finalAmt = totalAmt + gst - (editingBill?.receiptTotalAmount || 0);
+                const outstanding = Math.max(0, finalAmt - (editingBill?.collectedAmount || 0));
+                return (
+                  <View style={styles.modalTotalsBox}>
+                    <View style={styles.modalTotalsRow}>
+                      <Text style={styles.modalTotalsLabel}>Total Weight</Text>
+                      <Text style={styles.modalTotalsValue}>{totalWt.toFixed(3)}g</Text>
+                    </View>
+                    <View style={styles.modalTotalsRow}>
+                      <Text style={styles.modalTotalsLabel}>Items Total</Text>
+                      <Text style={styles.modalTotalsValue}>₹{totalAmt.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text>
+                    </View>
+                    {gst > 0 && (
+                      <View style={styles.modalTotalsRow}>
+                        <Text style={styles.modalTotalsLabel}>GST</Text>
+                        <Text style={styles.modalTotalsValue}>₹{gst.toFixed(2)}</Text>
+                      </View>
+                    )}
+                    <View style={[styles.modalTotalsRow, {borderTopWidth:1, borderColor:'#D4AF3760', marginTop:6, paddingTop:6}]}>
+                      <Text style={[styles.modalTotalsLabel, {fontWeight:'800'}]}>Final Amount</Text>
+                      <Text style={[styles.modalTotalsValue, {fontSize:16, color: DARK_BROWN}]}>₹{finalAmt.toLocaleString('en-IN', {maximumFractionDigits:2})}</Text>
+                    </View>
+                    <View style={styles.modalTotalsRow}>
+                      <Text style={styles.modalTotalsLabel}>Outstanding</Text>
+                      <Text style={[styles.modalTotalsValue, {color: outstanding > 0 ? '#C0392B' : '#2E7D32'}]}>
+                        ₹{outstanding.toLocaleString('en-IN', {maximumFractionDigits:2})}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })()}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => { setEditingBill(null); setEditItems([]); }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, editSaving && { opacity: 0.7 }]}
+                onPress={handleSaveEdit}
+                disabled={editSaving}
+              >
+                {editSaving
+                  ? <ActivityIndicator size="small" color={GOLD} />
+                  : <MaterialCommunityIcons name="check" size={18} color={GOLD} />
+                }
+                <Text style={styles.modalSaveBtnText}>{editSaving ? 'Saving...' : 'Save Changes'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -570,4 +826,84 @@ const styles = StyleSheet.create({
   errorText: { color: DARK_BROWN, fontSize: 18, fontWeight: '700', marginTop: 12 },
   backLink: { marginTop: 16 },
   backLinkText: { color: GOLD, fontWeight: '700', fontSize: 14 },
+
+  billActionRow: {
+    flexDirection: 'row', gap: 8, marginTop: 10,
+    borderTopWidth: 1, borderColor: '#F0E4CC', paddingTop: 10,
+  },
+  billEditBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingVertical: 7, borderRadius: 10,
+    borderWidth: 1.5, borderColor: DARK_BROWN, backgroundColor: '#FDFAF4',
+  },
+  billEditBtnText: { fontSize: 12, fontWeight: '700', color: DARK_BROWN },
+  billDeleteBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, paddingVertical: 7, borderRadius: 10, backgroundColor: '#C0392B',
+  },
+  billDeleteBtnText: { fontSize: 12, fontWeight: '700', color: '#FFF' },
+
+  // Edit Bill Modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    maxHeight: '88%', paddingBottom: 32,
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: '#DDD',
+    alignSelf: 'center', marginTop: 12, marginBottom: 4,
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 14,
+    borderBottomWidth: 1, borderColor: '#F0E4CC',
+  },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: DARK_BROWN },
+  modalCloseBtn: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: '#F5EDD8',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalBody: { paddingHorizontal: 16, paddingTop: 12 },
+  editItemCard: {
+    backgroundColor: '#FDFAF4', borderRadius: 14, padding: 12,
+    marginBottom: 10, borderWidth: 1, borderColor: '#F0E4CC',
+  },
+  editItemName: { fontSize: 14, fontWeight: '700', color: DARK_BROWN, marginBottom: 2 },
+  editItemSub: { fontSize: 11, color: '#A08850', marginBottom: 8 },
+  editItemRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  editItemMeta: { flexDirection: 'row', gap: 16 },
+  editMetaLabel: { fontSize: 10, color: '#888' },
+  editMetaValue: { fontSize: 13, fontWeight: '700', color: DARK_BROWN },
+  editCountRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  editCountBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: DARK_BROWN,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  editCountText: { fontSize: 16, fontWeight: '800', color: DARK_BROWN, minWidth: 24, textAlign: 'center' },
+  editRemoveBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#FDECEA',
+    alignItems: 'center', justifyContent: 'center', marginLeft: 4,
+  },
+  modalTotalsBox: {
+    margin: 16, padding: 14, backgroundColor: '#F5EDD8',
+    borderRadius: 14, borderWidth: 1, borderColor: GOLD,
+  },
+  modalTotalsRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  modalTotalsLabel: { fontSize: 12, color: DARK_BROWN, fontWeight: '600' },
+  modalTotalsValue: { fontSize: 13, fontWeight: '800', color: DARK_BROWN },
+  modalFooter: {
+    flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 8,
+  },
+  modalCancelBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+    borderWidth: 1.5, borderColor: DARK_BROWN,
+  },
+  modalCancelText: { fontSize: 14, fontWeight: '700', color: DARK_BROWN },
+  modalSaveBtn: {
+    flex: 2, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+    backgroundColor: DARK_BROWN, flexDirection: 'row', justifyContent: 'center', gap: 8,
+  },
+  modalSaveBtnText: { fontSize: 14, fontWeight: '800', color: GOLD },
 });

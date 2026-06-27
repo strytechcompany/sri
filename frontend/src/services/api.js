@@ -141,6 +141,8 @@ export const transactionAPI = {
   getById: (id) => api.get(`/transactions/${id}`),
   getByCustomer: (customerId) => api.get(`/transactions/customer/${customerId}`),
   markPrinted: (id) => api.post(`/transactions/${id}/print`),
+  update: (id, data) => api.put(`/transactions/${id}`, data),
+  delete: (id) => api.delete(`/transactions/${id}`),
 };
 
 export const settlementAPI = {
