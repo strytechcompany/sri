@@ -86,6 +86,9 @@ export default function LoginScreen({ navigation }) {
       } else if (error?.code === 'ECONNABORTED') {
         title = 'Connection Timeout';
         message = 'The server took too long to respond. It may still be starting up — please try again in 30 seconds.';
+      } else if (error?.response?.status === 429) {
+        title = 'Too Many Attempts';
+        message = 'Too many failed login attempts. Your account is locked for 15 minutes.\n\nPlease wait before trying again.';
       } else {
         message = error?.response?.data?.message || error?.message || 'An unexpected error occurred.';
       }

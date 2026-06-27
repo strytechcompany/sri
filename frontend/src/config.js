@@ -13,9 +13,9 @@
 //   'https://xxxx.loca.lt/api'  ← paste the tunnel URL here
 
 // ── LOCAL (same WiFi / hotspot — no sleep, instant) ──────────────────────────
-const API_BASE_URL = 'http://10.138.194.226:5000/api';
+const API_BASE_URL = 'http://192.168.29.235:5000/api';
 
 // ── RENDER (cloud — works from any network / APK build) ──────────────────────
-// const API_BASE_URL = 'https://sri-3m2b.onrender.com/api';
+//  const API_BASE_URL = 'https://sri-3m2b.onrender.com/api';
 
 export default API_BASE_URL;
