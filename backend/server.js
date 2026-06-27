@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const mongoose = require('mongoose');
 const connectDB = require('./config/mongodb');
 const authRoutes = require('./routes/authRoutes');
 const otpRoutes = require('./routes/otpRoutes');
@@ -45,8 +46,13 @@ app.use('/api/linestock', lineStockRoutes);
 app.use('/api/settings', settingRoutes);
 app.use('/api/users', userRoutes);
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ success: true, message: 'Sri Vaishnavi Jewellers API is running' });
+app.get('/api/health', async (req, res) => {
+  try {
+    await mongoose.connection.db.admin().ping();
+    res.status(200).json({ success: true, message: 'Sri Vaishnavi Jewellers API is running' });
+  } catch {
+    res.status(503).json({ success: false, message: 'Database not ready' });
+  }
 });
 
 app.use((req, res) => {

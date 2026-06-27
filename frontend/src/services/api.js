@@ -97,7 +97,7 @@ export const cashLedgerAPI = {
 };
 
 export const authAPI = {
-  login: (email, password) => api.post('/auth/login', { email, password }),
+  login: (email, password) => api.post('/auth/login', { email, password }, { timeout: 30000 }),
   verifyOtp: (email, otp) => api.post('/auth/verify-otp', { email, otp }),
   getProfile: () => api.get('/auth/profile'),
   requestPasswordOtp: () => api.post('/auth/request-password-otp'),
