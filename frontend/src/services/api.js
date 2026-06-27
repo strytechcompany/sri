@@ -47,16 +47,9 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Retry once on network errors (covers Render cold-start that outlasts timeout)
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const config = error.config;
-    if (!error.response && !config._retried) {
-      config._retried = true;
-      await new Promise((r) => setTimeout(r, 3000));
-      return api(config);
-    }
     if (error.response && error.response.status === 401) {
       // If we get an Unauthorized error, the token is invalid or expired.
       // Clear storage so the user isn't trapped in a 401 loop

@@ -64,15 +64,34 @@ export default function LoginScreen({ navigation }) {
     return Object.keys(newErrors).length === 0;
   };
 
+  const attemptLogin = async () => {
+    const res = await login(email.trim().toLowerCase(), password);
+    if (res.requires_otp) setOtpModalVisible(true);
+  };
+
+  const isNetworkError = (err) =>
+    err?.message === 'Network Error' ||
+    err?.code === 'ERR_NETWORK' ||
+    err?.code === 'ECONNREFUSED';
+
   const handleLogin = async () => {
     if (!validate()) return;
     setLoading(true);
     try {
       await wakeServer(setWakeStatus);
       setWakeStatus(null);
-      const res = await login(email.trim().toLowerCase(), password);
-      if (res.requires_otp) {
-        setOtpModalVisible(true);
+      try {
+        await attemptLogin();
+      } catch (firstErr) {
+        if (isNetworkError(firstErr)) {
+          // Server process is up but not yet fully ready — wait and retry once
+          setWakeStatus('Server is warming up, retrying...');
+          await new Promise((r) => setTimeout(r, 6000));
+          setWakeStatus(null);
+          await attemptLogin();
+        } else {
+          throw firstErr;
+        }
       }
     } catch (error) {
       console.error('[Login] error:', error?.code, error?.message, error?.response?.data);
@@ -80,14 +99,12 @@ export default function LoginScreen({ navigation }) {
       let title = 'Login Failed';
       let message;
 
-      if (error?.message === 'Network Error' || error?.code === 'ECONNREFUSED' || error?.code === 'ERR_NETWORK') {
-        title = 'Cannot Connect to Server';
-        message =
-          'The cloud server could not be reached.\n\nThis usually means:\n1. The server is still waking up — wait 30 seconds and try again\n2. Your internet connection is off\n3. The Render service is down\n\nError: ' +
-          (error?.message || 'Network Error');
+      if (isNetworkError(error)) {
+        title = 'Cannot Connect';
+        message = 'The server could not be reached. Please check your internet connection and try again.';
       } else if (error?.code === 'ECONNABORTED') {
         title = 'Connection Timeout';
-        message = 'The server took too long to respond. It may still be starting up — please try again in 30 seconds.';
+        message = 'The server took too long to respond. Please try again in a moment.';
       } else if (error?.response?.status === 429) {
         title = 'Too Many Attempts';
         message = 'Too many failed login attempts. Your account is locked for 15 minutes.\n\nPlease wait before trying again.';
