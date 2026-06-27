@@ -6,8 +6,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { transactionAPI, settlementAPI } from '../../services/api';
-import { PrintService } from '../../services/PrintService';
+import { PrintService, SettlementPrintService } from '../../services/PrintService';
 import { useDashboard } from '../../context/DashboardContext';
+import { useAuth } from '../../context/AuthContext';
 
 const GOLD = '#D4AF37';
 const DARK_BROWN = '#4B2E05';
@@ -43,10 +44,13 @@ export default function BillPreviewScreen({ navigation, route }) {
     }
   };
 
+  const { user } = useAuth();
   const { goldRate: dashboardGoldRate } = useDashboard();
   const [settlementAmount, setSettlementAmount] = useState('');
   const [settlementMode, setSettlementMode] = useState('Cash');
   const [settling, setSettling] = useState(false);
+  const [settlements, setSettlements] = useState([]);
+  const [settlementPrinting, setSettlementPrinting] = useState({});
 
   const isPreviewMode = !!previewPayload;
 
@@ -82,6 +86,19 @@ export default function BillPreviewScreen({ navigation, route }) {
     fetchTxn();
   }, [transactionId, isPreviewMode, previewPayload, navigation]);
 
+  const fetchSettlements = async (txnId) => {
+    try {
+      const res = await settlementAPI.getByBill(txnId);
+      if (res.data.success) setSettlements(res.data.data);
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (!isPreviewMode && transaction?._id) {
+      fetchSettlements(transaction._id);
+    }
+  }, [transaction?._id, isPreviewMode]);
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -101,6 +118,11 @@ export default function BillPreviewScreen({ navigation, route }) {
     oldBalanceBefore, oldBalanceAfter, advanceBalanceBefore, advanceBalanceAfter, convertedGram, gstDetails,
     commonBillNo,
   } = transaction;
+
+  // In preview mode customerId is a plain ID string; use transaction.customer instead
+  const customerInfo = (customerId && typeof customerId === 'object')
+    ? customerId
+    : (transaction.customer || {});
 
   const dateStr = new Date(createdAt).toLocaleDateString('en-GB');
   const timeStr = new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -132,7 +154,6 @@ export default function BillPreviewScreen({ navigation, route }) {
 
           <View style={[styles.row, {alignItems: 'flex-start'}]}>
             <View>
-              <Text style={styles.mono}>Txn No: {_id ? _id.slice(-6).toUpperCase() : 'PENDING'}</Text>
               {commonBillNo ? <Text style={[styles.mono, {fontWeight: 'bold'}]}>Bill No: {commonBillNo}</Text> : null}
             </View>
             <View style={{alignItems: 'flex-end'}}>
@@ -143,8 +164,8 @@ export default function BillPreviewScreen({ navigation, route }) {
 
           <Text style={styles.divider}>--------------------------------</Text>
           <Text style={styles.sectionTitle}>CUSTOMER DETAILS</Text>
-          <View style={styles.row}><Text style={styles.mono}>Name:</Text><Text style={styles.mono}>{customerId?.customerName}</Text></View>
-          <View style={styles.row}><Text style={styles.mono}>Phone:</Text><Text style={styles.mono}>{customerId?.phoneNumber}</Text></View>
+          <View style={styles.row}><Text style={styles.mono}>Name:</Text><Text style={styles.mono}>{customerInfo.customerName || '—'}</Text></View>
+          <View style={styles.row}><Text style={styles.mono}>Phone:</Text><Text style={styles.mono}>{customerInfo.phoneNumber || '—'}</Text></View>
           <View style={styles.row}><Text style={styles.mono}>Old Bal:</Text><Text style={styles.mono}>{Number(oldBalanceBefore).toFixed(3)}g</Text></View>
           <View style={styles.row}><Text style={styles.mono}>Advance:</Text><Text style={styles.mono}>{Number(advanceBalanceBefore).toFixed(3)}g</Text></View>
 
@@ -264,6 +285,8 @@ export default function BillPreviewScreen({ navigation, route }) {
           <Text style={[styles.footerMsg, {marginBottom: 4}]}>Thank You For Visiting</Text>
           <Text style={[styles.brandTitle, {fontSize: 16, marginBottom: 4}]}>Sri Vaishnavi Jewellers</Text>
           <Text style={styles.footerMsg}>Visit Again</Text>
+          <Text style={styles.divider}>--------------------------------</Text>
+          <Text style={[styles.mono, {textAlign: 'center', marginTop: 4}]}>Done by: {user?.name || 'SVJ'}</Text>
         </View>
 
         {/* SETTLEMENT MODULE FOR READ-ONLY OUTSTANDING BILLS */}
@@ -328,8 +351,9 @@ export default function BillPreviewScreen({ navigation, route }) {
               style={[styles.saveSettlementBtn, settling && {opacity: 0.7}]} 
               disabled={settling || !settlementAmount || Number(settlementAmount) <= 0}
               onPress={async () => {
-                const amt = Number(settlementAmount);
-                if (amt > transaction.outstandingAmount) {
+                const amt = Math.round(Number(settlementAmount) * 100) / 100;
+                const outstanding = Math.round(transaction.outstandingAmount * 100) / 100;
+                if (amt > outstanding) {
                   Alert.alert('Error', 'Amount exceeds outstanding balance!');
                   return;
                 }
@@ -345,8 +369,10 @@ export default function BillPreviewScreen({ navigation, route }) {
                   });
                   if (res.data.success) {
                     Alert.alert('Success', 'Settlement completed!');
-                    // Refresh current transaction
-                    const txRes = await transactionAPI.getById(transaction._id);
+                    const [txRes] = await Promise.all([
+                      transactionAPI.getById(transaction._id),
+                      fetchSettlements(transaction._id),
+                    ]);
                     setTransaction(txRes.data.data);
                     setSettlementAmount('');
                     navigation.navigate('SettlementPreview', { settlement: res.data.data, originalBillNumber: transaction._id.slice(-6).toUpperCase() });
@@ -362,6 +388,73 @@ export default function BillPreviewScreen({ navigation, route }) {
                 <Text style={styles.saveSettlementText}>Save & Print Settlement Bill</Text>
               )}
             </TouchableOpacity>
+          </View>
+        )}
+        {/* Settlement History */}
+        {!isPreviewMode && settlements.length > 0 && (
+          <View style={styles.settlementHistoryCard}>
+            <Text style={styles.settlementHistoryTitle}>Settlement History</Text>
+            {settlements.map((s, idx) => {
+              const sDate = new Date(s.createdAt).toLocaleDateString('en-GB');
+              const sTime = new Date(s.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+              const originalBillNo = transaction._id.slice(-6).toUpperCase();
+              const isPrinting = settlementPrinting[s._id] === 'print';
+              const isSharing = settlementPrinting[s._id] === 'share';
+
+              const lockPrint = async (key, fn) => {
+                if (settlementPrinting[s._id]) return;
+                setSettlementPrinting(prev => ({ ...prev, [s._id]: key }));
+                try { await fn(); } catch (e) {
+                  if (!e?.message?.toLowerCase().includes('cancel'))
+                    Alert.alert('Error', e?.message || 'Action failed');
+                } finally {
+                  setSettlementPrinting(prev => ({ ...prev, [s._id]: null }));
+                }
+              };
+
+              return (
+                <View key={s._id} style={[styles.settlementHistoryRow, idx > 0 && { borderTopWidth: 1, borderTopColor: '#F0E8D8', marginTop: 10, paddingTop: 10 }]}>
+                  <View style={styles.settlementHistoryLeft}>
+                    <Text style={styles.settlementBillNo}>{s.settlementBillNumber}</Text>
+                    <Text style={styles.settlementMeta}>{sDate} {sTime} · {s.paymentMode}</Text>
+                    <View style={styles.settlementAmtRow}>
+                      <Text style={styles.settlementAmtLabel}>Paid</Text>
+                      <Text style={styles.settlementAmtVal}>₹{s.amountPaid.toLocaleString('en-IN')}</Text>
+                      <Text style={[styles.settlementAmtLabel, { marginLeft: 12 }]}>Remaining</Text>
+                      <Text style={[styles.settlementAmtVal, { color: s.outstandingAfter > 0 ? '#D32F2F' : '#2E7D32' }]}>
+                        ₹{s.outstandingAfter.toLocaleString('en-IN')}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.settlementHistoryActions}>
+                    <TouchableOpacity
+                      style={[styles.settlementActionBtn, isPrinting && { opacity: 0.6 }]}
+                      disabled={!!settlementPrinting[s._id]}
+                      onPress={() => lockPrint('print', () => SettlementPrintService.printReceipt(s, originalBillNo))}
+                    >
+                      {isPrinting
+                        ? <ActivityIndicator size="small" color={DARK_BROWN} />
+                        : <MaterialCommunityIcons name="printer" size={18} color={DARK_BROWN} />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.settlementActionBtn, { backgroundColor: '#E8F5E9' }, isSharing && { opacity: 0.6 }]}
+                      disabled={!!settlementPrinting[s._id]}
+                      onPress={() => lockPrint('share', () => SettlementPrintService.shareWhatsApp(s, originalBillNo))}
+                    >
+                      {isSharing
+                        ? <ActivityIndicator size="small" color="#25D366" />
+                        : <MaterialCommunityIcons name="whatsapp" size={18} color="#25D366" />}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.settlementActionBtn, { backgroundColor: '#E8EAF6' }]}
+                      onPress={() => navigation.navigate('SettlementPreview', { settlement: s, originalBillNumber: originalBillNo })}
+                    >
+                      <MaterialCommunityIcons name="eye" size={18} color="#3949AB" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -403,7 +496,7 @@ export default function BillPreviewScreen({ navigation, route }) {
               disabled={printing || sharing || saving}
               onPress={() => withPrintLock(setPrinting, () =>
                 PrintService.printThermal(
-                  { ...transaction, createdAt: transaction.createdAt || new Date().toISOString() },
+                  { ...transaction, createdAt: transaction.createdAt || new Date().toISOString(), createdByName: user?.name || 'SVJ' },
                   tamilMsg
                 )
               )}
@@ -419,7 +512,7 @@ export default function BillPreviewScreen({ navigation, route }) {
               disabled={printing || sharing || saving}
               onPress={() => withPrintLock(setSharing, () =>
                 PrintService.shareWhatsApp(
-                  { ...transaction, createdAt: transaction.createdAt || new Date().toISOString() },
+                  { ...transaction, createdAt: transaction.createdAt || new Date().toISOString(), createdByName: user?.name || 'SVJ' },
                   tamilMsg
                 )
               )}
@@ -435,7 +528,7 @@ export default function BillPreviewScreen({ navigation, route }) {
             <TouchableOpacity 
               style={[styles.actionBtn, (printing || sharing) && { opacity: 0.6 }]} 
               disabled={printing || sharing}
-              onPress={() => withPrintLock(setPrinting, () => PrintService.printThermal(transaction, tamilMsg).then(() => {
+              onPress={() => withPrintLock(setPrinting, () => PrintService.printThermal({ ...transaction, createdByName: user?.name || 'SVJ' }, tamilMsg).then(() => {
                 try { transactionAPI.markPrinted(transaction._id); } catch(e){}
               }))}
             >
@@ -448,7 +541,7 @@ export default function BillPreviewScreen({ navigation, route }) {
             <TouchableOpacity 
               style={[styles.actionBtn, {backgroundColor: '#25D366'}, (printing || sharing) && { opacity: 0.6 }]} 
               disabled={printing || sharing}
-              onPress={() => withPrintLock(setSharing, () => PrintService.shareWhatsApp(transaction, tamilMsg))}
+              onPress={() => withPrintLock(setSharing, () => PrintService.shareWhatsApp({ ...transaction, createdByName: user?.name || 'SVJ' }, tamilMsg))}
             >
               {sharing
                 ? <ActivityIndicator size="small" color="#FFF" />
@@ -532,5 +625,18 @@ const styles = StyleSheet.create({
   actionsBar: { flexDirection: 'row', justifyContent: 'space-around' },
   actionBtn: { flex: 1, backgroundColor: DARK_BROWN, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, marginHorizontal: 4, borderRadius: 8, gap: 6 },
   saveBtn: { backgroundColor: DARK_BROWN, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 8, gap: 6 },
-  actionText: { color: '#FFF', fontWeight: '700', fontSize: 13 }
+  actionText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+
+  // Settlement History
+  settlementHistoryCard: { backgroundColor: '#FFF', margin: 16, marginTop: 0, borderRadius: 12, padding: 16, elevation: 4, borderWidth: 1, borderColor: '#F0E4CC' },
+  settlementHistoryTitle: { fontSize: 14, fontWeight: '800', color: DARK_BROWN, marginBottom: 12, textAlign: 'center', letterSpacing: 0.5 },
+  settlementHistoryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  settlementHistoryLeft: { flex: 1 },
+  settlementBillNo: { fontSize: 13, fontWeight: '800', color: DARK_BROWN },
+  settlementMeta: { fontSize: 11, color: '#888', marginTop: 2 },
+  settlementAmtRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  settlementAmtLabel: { fontSize: 10, color: '#888', marginRight: 4 },
+  settlementAmtVal: { fontSize: 12, fontWeight: '700', color: '#333' },
+  settlementHistoryActions: { flexDirection: 'row', gap: 6, marginLeft: 8 },
+  settlementActionBtn: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#F5EFE0', alignItems: 'center', justifyContent: 'center' },
 });

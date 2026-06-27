@@ -21,7 +21,7 @@ const CashLedgerSchema = new mongoose.Schema(
     },
     referenceModel: {
       type: String,
-      enum: ['Transaction', 'Expense', 'ChitTransaction', 'ChitFundReceipt', 'LineStockSettlement', 'User'],
+      enum: ['Transaction', 'Settlement', 'Expense', 'ChitTransaction', 'ChitFundReceipt', 'LineStockSettlement', 'User'],
     },
     description: {
       type: String,

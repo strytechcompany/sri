@@ -8,13 +8,13 @@ const protect = async (req, res, next) => {
     try {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = authStore.getUserById(decoded.id);
+      const user = await authStore.getUserById(decoded.id);
 
       if (!user) {
         return res.status(401).json({ success: false, message: 'Account is inactive or not found' });
       }
 
-      req.user = { ...user, _id: user.id };
+      req.user = user;
       next();
     } catch (error) {
       return res.status(401).json({ success: false, message: 'Token is invalid or expired' });

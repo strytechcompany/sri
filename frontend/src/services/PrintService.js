@@ -21,7 +21,12 @@ const escapeHtml = (value) => String(value ?? '')
   .replace(/'/g, '&#39;');
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const formatMoneyInt = (value) => Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 const formatGram = (value) => `${Number(value || 0).toFixed(3)}g`;
+// 4 decimal places; returns '' when value is zero (no trailing zeros shown)
+const fmt4 = (v) => { const n = Number(v || 0); return n === 0 ? '' : n.toFixed(4); };
+// Purity/touch: up to 2 decimal places, strips trailing zeros (91.60 → "91.6")
+const fmtPurity = (v) => { const n = Number(v || 0); return n === 0 ? '' : parseFloat(n.toFixed(2)).toString(); };
 const splitLines = (value, fallback = '') =>
   String(value ?? fallback)
     .split(/\r?\n/)
@@ -153,15 +158,16 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
       text-align: left;
       padding: 2px 0;
       vertical-align: top;
+      white-space: normal;
       word-break: break-word;
       color: #000;
       background: #fff;
     }
-    th { border-bottom: 1px dashed #000; font-weight: 700; }
+    th { border-bottom: 1px dashed #000; font-weight: 700; white-space: nowrap; }
     .amt-col { text-align: right; }
-    .item-col { width: 42%; }
-    .weight-col { width: 20%; }
-    .purity-col { width: 14%; }
+    .item-col { width: 36%; }
+    .weight-col { width: 22%; }
+    .purity-col { width: 18%; }
     .amount-col { width: 24%; text-align: right; }
     .rate-banner {
       width: 100%;
@@ -176,14 +182,18 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
 
   const styles = thermalStyles; // Standardize all printing to 80mm Thermal Receipt
 
+  const customerInfo = (customerId && typeof customerId === 'object')
+    ? customerId
+    : (transaction.customer || {});
+
   let issueRows = '';
   issueItems.forEach(item => {
     issueRows += `
       <tr>
         <td class="item-col">${item.itemName || '-'}</td>
-        <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-        <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
-        <td class="amount-col">${Number(item.amount || 0).toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
+        <td class="weight-col">${fmt4(item.weight) || '-'}</td>
+        <td class="purity-col">${fmtPurity(item.purity) || '-'}</td>
+        <td class="amount-col">${formatMoneyInt(item.amount) || '-'}</td>
       </tr>
     `;
   });
@@ -193,9 +203,9 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
     receiptRows += `
       <tr>
         <td class="item-col">${item.receiptType || '-'}</td>
-        <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-        <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
-        <td class="amount-col">${Number(item.amount || 0).toLocaleString('en-IN', {maximumFractionDigits:2})}</td>
+        <td class="weight-col">${fmt4(item.weight) || '-'}</td>
+        <td class="purity-col">${fmtPurity(item.purity) || '-'}</td>
+        <td class="amount-col">${formatMoneyInt(item.amount) || '-'}</td>
       </tr>
     `;
   });
@@ -221,17 +231,15 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
         <div class="center bold">${escapeHtml((transactionType || 'B2B') + ' BILL')}</div>
         <div class="divider"></div>
 
-        ${row('Txn No:', _id.slice(-6).toUpperCase())}
         ${transaction.commonBillNo ? row('Bill No:', escapeHtml(transaction.commonBillNo)) : ''}
         ${row('Date/Time:', `${dateStr} ${timeStr}`)}
 
         <div class="divider"></div>
         <div class="bold">CUSTOMER DETAILS</div>
-        ${row('Name:', customerId?.customerName || 'N/A')}
-        ${row('Phone:', customerId?.phoneNumber || 'N/A')}
-        ${row('Address:', customerId?.address || 'N/A')}
-        ${row('Old Bal:', `${Number(oldBalanceBefore).toFixed(3)}g`)}
-        ${row('Advance:', `${Number(advanceBalanceBefore).toFixed(3)}g`)}
+        ${row('Name:', escapeHtml(customerInfo.customerName || 'N/A'))}
+        ${row('Phone:', escapeHtml(customerInfo.phoneNumber || 'N/A'))}
+        ${Number(oldBalanceBefore) ? row('Old Bal:', `${Number(oldBalanceBefore).toFixed(3)}g`) : ''}
+        ${Number(advanceBalanceBefore) ? row('Advance:', `${Number(advanceBalanceBefore).toFixed(3)}g`) : ''}
 
         <div class="divider"></div>
         <div class="center bold" style="padding: 5px; border: 1px dashed #000;">
@@ -248,8 +256,8 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
             <tbody>${issueRows}</tbody>
           </table>
           <div class="divider"></div>
-          ${row('Issue Total Wt:', `${issueTotalWeight.toFixed(3)}g`, 'bold')}
-          ${row('Issue Total Amt:', issueTotalAmount.toLocaleString('en-IN', {maximumFractionDigits:2}), 'bold')}
+          ${row('Total Weight:', `${issueTotalWeight.toFixed(3)}g`, 'bold')}
+          ${row('Total Amount:', formatMoneyInt(issueTotalAmount), 'bold')}
         ` : ''}
 
         ${receiptItems.length > 0 ? `
@@ -288,16 +296,12 @@ const generateHTML = async (transaction, isThermal = true, customTamilMsg) => {
         ${row('BALANCE DUE:', `\u20B9${Math.max(0, finalAmount - collectedAmount).toLocaleString('en-IN', {maximumFractionDigits:2})}`, 'bold')}
 
         <div class="divider"></div>
-        <div class="bold">TRANSACTION SUMMARY</div>
-        ${row('Converted Gram:', `${Number(convertedGram).toFixed(3)}g`)}
-        ${row('New Old Balance:', `${Number(oldBalanceAfter).toFixed(3)}g`, 'bold')}
-        ${row('New Advance:', `${Number(advanceBalanceAfter).toFixed(3)}g`, 'bold')}
-
-        <div class="divider"></div>
         <div class="center" style="margin-top: 10px;">${tamilMsg}</div>
         <div class="center" style="margin-top: 10px;">Thank You For Visiting</div>
         <div class="center bold">Sri Vaishnavi Jewellers</div>
         <div class="center">Visit Again</div>
+        <div class="divider"></div>
+        <div class="center" style="margin-top: 4px;">Done by: ${escapeHtml(transaction.createdByName || 'SVJ')}</div>
         </div>
       </body>
     </html>
@@ -345,7 +349,6 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
   );
   const phoneLine = [shopProfile?.phone1, shopProfile?.phone2].filter(Boolean).join(' / ');
   const billTitle = `${transactionType || 'B2B'} BILL`;
-  const txnNo = _id ? _id.slice(-6).toUpperCase() : 'PENDING';
   const dateStr = new Date(createdAt).toLocaleDateString('en-GB');
   const timeStr = new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const cgst = gstDetails?.cgstAmount || 0;
@@ -354,22 +357,25 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
   const balanceDue = Math.max(0, finalAmount - collectedAmount);
 
   const commonBillNo = transaction.commonBillNo || '';
+  const customerInfo = (customerId && typeof customerId === 'object')
+    ? customerId
+    : (transaction.customer || {});
 
   const issueRows = issueItems.map((item) => `
     <tr>
       <td class="item-col">${escapeHtml(item.itemName || '-')}</td>
-      <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-      <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
-      <td class="amount-col">${formatMoney(item.amount)}</td>
+      <td class="weight-col">${fmt4(item.weight) || '-'}</td>
+      <td class="purity-col">${fmtPurity(item.purity) || '-'}</td>
+      <td class="amount-col">${formatMoneyInt(item.amount) || '-'}</td>
     </tr>
   `).join('');
 
   const receiptRows = receiptItems.map((item) => `
     <tr>
       <td class="item-col">${escapeHtml(item.receiptType || '-')}</td>
-      <td class="weight-col">${Number(item.weight || 0).toFixed(3)}g</td>
-      <td class="purity-col">${Number(item.purity ?? 0).toFixed(2)}</td>
-      <td class="amount-col">${formatMoney(item.amount)}</td>
+      <td class="weight-col">${fmt4(item.weight) || '-'}</td>
+      <td class="purity-col">${fmtPurity(item.purity) || '-'}</td>
+      <td class="amount-col">${formatMoneyInt(item.amount) || '-'}</td>
     </tr>
   `).join('');
 
@@ -413,11 +419,11 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
           .rate-banner { width: 100%; text-align: center; font-weight: 700; padding: 2mm 1mm; border-top: 1px dashed #000; border-bottom: 1px dashed #000; margin: 4px 0; }
           .section-title { text-align: center; font-weight: 700; margin: 3px 0 2px; }
           table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 3px 0; font-size: 11px; }
-          th, td { padding: 2px 0; vertical-align: top; word-break: break-word; }
-          th { text-align: left; border-bottom: 1px dashed #000; font-weight: 700; }
-          .item-col { width: 42%; }
-          .weight-col { width: 20%; }
-          .purity-col { width: 14%; }
+          th, td { padding: 2px 0; vertical-align: top; white-space: normal; word-break: break-word; }
+          th { text-align: left; border-bottom: 1px dashed #000; font-weight: 700; white-space: nowrap; }
+          .item-col { width: 36%; }
+          .weight-col { width: 22%; }
+          .purity-col { width: 18%; }
           .amount-col { width: 24%; text-align: right; }
           .footer { text-align: center; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
           .right { text-align: right; }
@@ -435,18 +441,16 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
           <div class="center section-title">${escapeHtml(billTitle)}</div>
           <hr class="divider" />
 
-          ${renderRow('Txn No:', escapeHtml(txnNo))}
           ${commonBillNo ? renderRow('Bill No:', escapeHtml(commonBillNo)) : ''}
           ${renderRow('Date:', escapeHtml(dateStr))}
           ${renderRow('Time:', escapeHtml(timeStr))}
 
           <hr class="divider" />
           <div class="section-title">CUSTOMER DETAILS</div>
-          ${renderRow('Customer Name:', escapeHtml(customerId?.customerName || 'N/A'))}
-          ${renderRow('Phone:', escapeHtml(customerId?.phoneNumber || 'N/A'))}
-          ${renderRow('Address:', escapeHtml(customerId?.address || 'N/A'))}
-          ${renderRow('Old Balance:', formatGram(oldBalanceBefore))}
-          ${renderRow('Advance:', formatGram(advanceBalanceBefore))}
+          ${renderRow('Customer Name:', escapeHtml(customerInfo.customerName || 'N/A'))}
+          ${renderRow('Phone:', escapeHtml(customerInfo.phoneNumber || 'N/A'))}
+          ${Number(oldBalanceBefore) ? renderRow('Old Balance:', formatGram(oldBalanceBefore)) : ''}
+          ${Number(advanceBalanceBefore) ? renderRow('Advance:', formatGram(advanceBalanceBefore)) : ''}
 
           <hr class="divider" />
           <div class="rate-banner">GOLD RATE TODAY : \u20B9${escapeHtml(goldRate)}</div>
@@ -466,8 +470,8 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
               <tbody>${issueRows}</tbody>
             </table>
             <hr class="divider" />
-            ${renderRow('Issue Total Weight', formatGram(issueTotalWeight), 'right')}
-            ${renderRow('Issue Total Amount', `\u20B9${formatMoney(issueTotalAmount)}`, 'right')}
+            ${renderRow('Total Weight', formatGram(issueTotalWeight), 'right')}
+            ${renderRow('Total Amount', `\u20B9${formatMoneyInt(issueTotalAmount)}`, 'right')}
           ` : ''}
 
           ${receiptItems.length > 0 ? `
@@ -509,17 +513,13 @@ const generateThermalReceiptHTML = async (transaction, customTamilMsg) => {
           ${renderRow('Balance Due', `\u20B9${formatMoney(balanceDue)}`)}
 
           <hr class="divider" />
-          <div class="section-title">TRANSACTION SUMMARY</div>
-          ${renderRow('Converted Gram', formatGram(convertedGram))}
-          ${renderRow('New Gold Balance', formatGram(oldBalanceAfter))}
-          ${renderRow('Advance', formatGram(advanceBalanceAfter))}
-
-          <hr class="divider" />
           <div class="footer">${escapeHtml(tamilMsg)}</div>
           <div class="footer" style="margin-top: 6px;">Thank You For Visiting</div>
           <div class="center shop-name" style="font-size: 14px; margin-top: 2px;">${escapeHtml(shopName)}</div>
           <div class="center subline">Visit Again</div>
           ${footerMsg ? `<div class="footer" style="margin-top: 4px;">${escapeHtml(footerMsg)}</div>` : ''}
+          <hr class="divider" />
+          <div class="center" style="margin-top: 4px;">Done by: ${escapeHtml(transaction.createdByName || 'SVJ')}</div>
         </div>
       </body>
     </html>`;

@@ -34,7 +34,36 @@ export default function TransactionCalculationScreen({ navigation, route }) {
   const [showStockDropdown, setShowStockDropdown] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scannerTorch, setScannerTorch] = useState(false);
+  const [pendingScanValue, setPendingScanValue] = useState(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+
+  const normalizeScanValue = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const lines = raw
+      .split(/[\r\n]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const primary = lines[0] || raw;
+    return primary.replace(/\s+/g, ' ').trim();
+  };
+
+  const buildScanCandidates = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+
+    const normalized = normalizeScanValue(raw);
+    const noSpaces = normalized.replace(/\s+/g, '');
+    const compact = normalized.replace(/[^a-zA-Z0-9_-]/g, '');
+    const parts = normalized
+      .split(/[\s|,;:/\\]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    return [...new Set([normalized, noSpaces, compact, raw, ...parts])];
+  };
 
   // Issue Section
   const [issueStockId, setIssueStockId] = useState('');
@@ -141,39 +170,95 @@ export default function TransactionCalculationScreen({ navigation, route }) {
     return () => clearTimeout(timeoutId);
   }, [stockQuery]);
 
-  const selectStockItem = (s) => {
+  // Shared fill helper — called by both scan and manual submit
+  const fillStock = (s) => {
     setIssueStockId(s._id);
     setIssueItemNo(s.itemNumber);
-    setIssueItemName(s.itemName || s.designName);
-    setIssueWeight(s.netWeight.toString());
-    setIssueSRICost(s.buyingTouch ? s.buyingTouch.toString() : '0');
+    setIssueItemName(s.itemName || s.designName || '');
+    setIssueWeight(s.netWeight != null ? String(s.netWeight) : '0');
+    setIssueSRICost(s.buyingTouch ? String(s.buyingTouch) : '0');
     setStockQuery(s.itemNumber);
     setShowStockDropdown(false);
     setIssueSRIBill('');
     setIssueAmountOverride('');
   };
 
-  const handleStockLookup = useCallback(async (rawValue) => {
-    const query = (rawValue || '').trim();
-    if (!query) {
-      setStockResults([]);
-      setShowStockDropdown(false);
-      return;
-    }
+  const lookupStock = async (query) => {
+    const normalizedQuery = normalizeScanValue(query);
+    const candidates = buildScanCandidates(normalizedQuery);
 
-    setStockQuery(query);
-    setShowStockDropdown(true);
-
-    try {
-      const exactRes = await stockAPI.getByBarcode(query);
-      if (exactRes?.data?.success && exactRes.data.data) {
-        selectStockItem(exactRes.data.data);
-        return;
+    // Step 1: exact barcode / itemNumber lookup — no availability filter on backend
+    for (const candidate of candidates) {
+      try {
+        const res = await stockAPI.getByBarcode(candidate);
+        if (res?.data?.success && res.data.data) {
+          fillStock(res.data.data);
+          return true;
+        }
+      } catch (err) {
+        console.log('[lookupStock] getByBarcode error:', err?.response?.status, err?.message);
       }
-    } catch {
-      // Fall back to the normal search dropdown when the code is not an exact barcode.
     }
-  }, [selectStockItem]);
+
+    // Step 2: full-text search fallback — scan=true bypasses isAvailable filter
+    try {
+      for (const candidate of candidates) {
+        const res = await stockAPI.getAll({ search: candidate, scan: 'true' });
+        if (!res?.data?.success) continue;
+
+        const flat = [];
+        (res.data.data || []).forEach(g => (g.records || []).forEach(r => flat.push(r)));
+        const lq = candidate.toLowerCase();
+        const match =
+          flat.find(item => (item.barcode || '').toLowerCase() === lq) ||
+          flat.find(item => (item.itemNumber || '').toLowerCase() === lq) ||
+          (flat.length === 1 ? flat[0] : null);
+
+        if (match) {
+          fillStock(match);
+          return true;
+        }
+        if (flat.length > 0) {
+          setStockResults(flat.slice(0, 10));
+          setShowStockDropdown(true);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.log('[lookupStock] getAll error:', err?.response?.status, err?.message);
+    }
+
+    return false;
+  };
+
+  // Auto-fill when a QR/barcode is scanned
+  useEffect(() => {
+    if (!pendingScanValue) return;
+    const query = normalizeScanValue(pendingScanValue);
+    setPendingScanValue(null);
+    if (!query) return;
+
+    // Show scanned value in the search input so user can see what was read
+    setStockQuery(query);
+
+    lookupStock(query).then(found => {
+      if (!found) {
+        Alert.alert(
+          'Not Found',
+          `Scanned: "${query}"\n\nNo stock item matched this code. Check if the item exists in stock list.`
+        );
+      }
+    });
+  }, [pendingScanValue]);
+
+  const selectStockItem = (s) => fillStock(s);
+
+  const handleStockLookup = async (rawValue) => {
+    const query = normalizeScanValue(rawValue);
+    if (!query) { setStockResults([]); setShowStockDropdown(false); return; }
+    setStockQuery(query);
+    await lookupStock(query);
+  };
 
   // --- Calculations for Issue ---
   const currentIssuePlus = useMemo(() => {
@@ -912,11 +997,12 @@ export default function TransactionCalculationScreen({ navigation, route }) {
               style={{ flex: 1 }}
               facing="back"
               enableTorch={scannerTorch}
-              barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+              barcodeScannerSettings={{ barcodeTypes: ["qr", "code128", "code39", "ean13", "ean8", "itf14"] }}
               onBarcodeScanned={({ data }) => {
                 setIsScanning(false);
                 setScannerTorch(false);
-                handleStockLookup(data);
+                const normalized = normalizeScanValue(data);
+                setPendingScanValue(normalized);
               }}
             >
               <View style={styles.scannerOverlay}>

@@ -15,8 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useStock } from '../../context/StockContext';
-import { useUsbPrinter } from '../../hooks/useUsbPrinter';
-import { printJewelryLabel } from '../../services/UsbPrinterService';
+import { printJewelryLabel } from '../../services/UsbPrinterService.js';
 
 const GOLD = '#D4AF37';
 const DARK_BROWN = '#4B2E05';
@@ -90,7 +89,6 @@ export default function AddStockScreen({ navigation, route }) {
   const [notes, setNotes] = useState(editItem?.notes ?? '');
   const [barcode, setBarcode] = useState(editItem?.barcode ?? '');
   const [printing, setPrinting] = useState(false);
-  const { status: printerStatus } = useUsbPrinter();
 
   // ─── Gross Weight → auto-sync Net Weight ──────────────────────────────────
   const handleGrossWeightChange = (text) => {
@@ -98,25 +96,17 @@ export default function AddStockScreen({ navigation, route }) {
     setNetWeight(text); // Net weight = Gross weight
   };
 
-  // ─── Generate Barcode ─────────────────────────────────────────────────────
+  // ─── Generate QR Code ─────────────────────────────────────────────────────
   const generateBarcode = () => {
     const ts = Date.now().toString(36).toUpperCase();
     const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
     setBarcode(`SVJ${ts}${rand}`);
   };
 
-  // ─── Print Barcode Label via USB OTG (TVS LP46 Lite) ─────────────────────────
+  // ─── Print QR Label via thermal printer ────────────────────────────────────
   const printBarcode = async () => {
     if (!barcode) {
-      Alert.alert('No Barcode', 'Please generate a barcode first.');
-      return;
-    }
-    if (printerStatus !== 'connected') {
-      Alert.alert(
-        'Printer Not Connected',
-        'USB printer status: ' + printerStatus + '.\n\nPlease connect the TVS LP46 Lite via USB OTG cable and grant USB permission when prompted.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('No QR Code', 'Please generate a QR code first.');
       return;
     }
     setPrinting(true);
@@ -129,7 +119,7 @@ export default function AddStockScreen({ navigation, route }) {
         netWeight,
         barcode,
       });
-      Alert.alert('Printed', 'Barcode label sent to USB printer.');
+      Alert.alert('Printed', 'QR label sent to thermal printer.');
     } catch (err) {
       Alert.alert('Print Failed', err.message || 'Could not print the barcode label.');
     } finally {
@@ -151,6 +141,11 @@ export default function AddStockScreen({ navigation, route }) {
 
     setSaving(true);
     try {
+      const finalBarcode = barcode || `SVJ${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+      if (!barcode) {
+        setBarcode(finalBarcode);
+      }
+
       const payload = {
         designName: designName.trim(),
         itemName: itemName.trim(),
@@ -162,6 +157,7 @@ export default function AddStockScreen({ navigation, route }) {
         buyingTouch: parseFloat(buyingTouch) || 0,
         quantity: parseInt(quantity),
         notes: notes.trim(),
+        barcode: finalBarcode,
       };
 
       let result;
@@ -328,30 +324,15 @@ export default function AddStockScreen({ navigation, route }) {
 
           {/* Barcode Section */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Barcode</Text>
+            <Text style={styles.fieldLabel}>QR Code</Text>
             <TouchableOpacity
               style={styles.barcodeBtn}
               onPress={generateBarcode}
               activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="barcode" size={20} color={HEADER_BG} />
-              <Text style={styles.barcodeBtnText}>Generate Barcode</Text>
+              <MaterialCommunityIcons name="qrcode" size={20} color={HEADER_BG} />
+              <Text style={styles.barcodeBtnText}>Generate QR</Text>
             </TouchableOpacity>
-
-            {/* USB Printer Status */}
-            <View style={styles.printerStatusRow}>
-              <MaterialCommunityIcons
-                name={printerStatus === 'connected' ? 'usb' : 'usb-off'}
-                size={14}
-                color={printerStatus === 'connected' ? '#2C6E49' : '#999'}
-              />
-              <Text style={[styles.printerStatusText, printerStatus === 'connected' && styles.printerStatusConnected]}>
-                {printerStatus === 'connected'      ? 'USB Printer Connected'
-                 : printerStatus === 'requesting_permission' ? 'Requesting USB permission…'
-                 : printerStatus === 'unavailable'  ? 'USB printing (Android only)'
-                 : 'USB Printer Disconnected'}
-              </Text>
-            </View>
 
             {barcode ? (
               <>
@@ -372,7 +353,7 @@ export default function AddStockScreen({ navigation, route }) {
                   ) : (
                     <>
                       <MaterialCommunityIcons name="printer" size={18} color="#FFFFFF" />
-                      <Text style={styles.printBtnText}>Print Barcode Label</Text>
+                      <Text style={styles.printBtnText}>Print QR Label</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -519,20 +500,6 @@ const styles = StyleSheet.create({
   },
   rowFields: {
     flexDirection: 'row',
-  },
-  printerStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 6,
-  },
-  printerStatusText: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '600',
-  },
-  printerStatusConnected: {
-    color: '#2C6E49',
   },
   barcodeBtn: {
     flexDirection: 'row',

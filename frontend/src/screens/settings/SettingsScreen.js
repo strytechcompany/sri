@@ -136,6 +136,15 @@ export default function SettingsScreen({ navigation }) {
           <SettingsRow icon="database-import" label="Restore Database" onPress={() => handleDataAction('Restore')} />
         </View>
 
+        {user?.role === 'SuperAdmin' && (
+          <>
+            <SectionHeader title="2. User Management" />
+            <View style={styles.section}>
+              <SettingsRow icon="account-group" label="Add / Manage Members" value="Admins, Managers, Staff" onPress={() => navigation.navigate('AddMember')} />
+            </View>
+          </>
+        )}
+
         <SectionHeader title="7. Security Settings" />
         <View style={styles.section}>
           <SettingsRow icon="shield-lock" label="Change Password" onPress={() => setPasswordModalVisible(true)} />

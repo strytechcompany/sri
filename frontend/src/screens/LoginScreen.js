@@ -16,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { wakeServer } from '../services/api';
 import LoginOtpModal from '../components/LoginOtpModal';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
 
 const GOLD = '#D4AF37';
 const GOLD_DARK = '#B8962E';
@@ -24,8 +25,6 @@ const LIGHT_GRAY = '#F8F8F8';
 const BORDER = '#E8E0CC';
 const TEXT_DARK = '#1A1A1A';
 const TEXT_GRAY = '#888888';
-const AUTHORIZED_EMAIL = 'srivaishnavijewellers1@gmail.com';
-const AUTH_EMAIL_HINT = `Use the registered email: ${AUTHORIZED_EMAIL}`;
 
 export default function LoginScreen({ navigation }) {
   const { login, verifyOtp } = useAuth();
@@ -36,6 +35,7 @@ export default function LoginScreen({ navigation }) {
   const [errors, setErrors] = useState({});
   const [otpModalVisible, setOtpModalVisible] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
+  const [forgotModalVisible, setForgotModalVisible] = useState(false);
 
   const resetForm = useCallback(() => {
     setEmail('');
@@ -57,9 +57,6 @@ export default function LoginScreen({ navigation }) {
     const newErrors = {};
     if (!email.trim()) newErrors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = 'Enter a valid email';
-    else if (email.trim().toLowerCase() !== AUTHORIZED_EMAIL) {
-      newErrors.email = `Use ${AUTHORIZED_EMAIL} to sign in`;
-    }
     if (!password) newErrors.password = 'Password is required';
     else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
     setErrors(newErrors);
@@ -154,7 +151,6 @@ export default function LoginScreen({ navigation }) {
               importantForAutofill="no"
             />
             {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-            <Text style={styles.hintText}>{AUTH_EMAIL_HINT}</Text>
           </View>
 
           {/* Password */}
@@ -195,6 +191,15 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.loginButtonText}>Sign In</Text>
             )}
           </TouchableOpacity>
+
+          {/* Forgot Password */}
+          <TouchableOpacity
+            style={styles.forgotButton}
+            onPress={() => setForgotModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.forgotText}>Forgot Password?</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Footer */}
@@ -207,6 +212,11 @@ export default function LoginScreen({ navigation }) {
         loading={otpLoading}
         onVerify={handleVerifyOtp}
         onCancel={() => setOtpModalVisible(false)}
+      />
+
+      <ForgotPasswordModal
+        visible={forgotModalVisible}
+        onClose={() => setForgotModalVisible(false)}
       />
     </KeyboardAvoidingView>
   );
@@ -338,12 +348,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginLeft: 2,
   },
-  hintText: {
-    fontSize: 12,
-    color: TEXT_GRAY,
-    marginTop: 6,
-    marginLeft: 2,
-  },
   loginButton: {
     height: 50,
     backgroundColor: GOLD,
@@ -360,6 +364,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  forgotButton: {
+    alignItems: 'center',
+    marginTop: 14,
+    paddingVertical: 4,
+  },
+  forgotText: {
+    fontSize: 14,
+    color: GOLD_DARK,
+    fontWeight: '600',
   },
   footer: {
     textAlign: 'center',

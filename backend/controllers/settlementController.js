@@ -20,15 +20,17 @@ exports.createSettlement = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Original Transaction not found' });
     }
 
-    if (originalTxn.outstandingAmount <= 0) {
+    const round2 = (n) => Math.round(n * 100) / 100;
+    if (round2(originalTxn.outstandingAmount) <= 0) {
       return res.status(400).json({ success: false, message: 'Transaction is already fully paid.' });
     }
 
-    // 2. Calculate New Balances
-    const outstandingBefore = originalTxn.outstandingAmount;
-    const outstandingAfter = Math.max(0, outstandingBefore - amountPaid);
-    const gramSettled = goldRateAtSettlement ? (amountPaid / goldRateAtSettlement) : 0;
-    
+    // 2. Calculate New Balances (round to 2 decimal places to eliminate floating-point drift)
+    const outstandingBefore = round2(originalTxn.outstandingAmount);
+    const paidAmt = round2(Number(amountPaid));
+    const outstandingAfter = round2(Math.max(0, outstandingBefore - paidAmt));
+    const gramSettled = goldRateAtSettlement ? (paidAmt / goldRateAtSettlement) : 0;
+
     const newOutstandingGram = Math.max(0, originalTxn.outstandingGram - gramSettled);
 
     // 3. Generate Settlement Bill Number (e.g., SET-TxnId-Count)
@@ -43,7 +45,7 @@ exports.createSettlement = async (req, res) => {
       settlementBillNumber,
       customerId,
       paymentMode,
-      amountPaid,
+      amountPaid: paidAmt,
       goldRateAtSettlement,
       gramSettled,
       outstandingBefore,
@@ -54,7 +56,7 @@ exports.createSettlement = async (req, res) => {
     // 5. Update Original Transaction
     originalTxn.outstandingAmount = outstandingAfter;
     originalTxn.outstandingGram = newOutstandingGram;
-    originalTxn.collectedAmount += amountPaid;
+    originalTxn.collectedAmount = round2((originalTxn.collectedAmount || 0) + paidAmt);
     originalTxn.status = outstandingAfter > 0 ? 'PARTIAL' : 'PAID';
     await originalTxn.save();
 
@@ -62,7 +64,7 @@ exports.createSettlement = async (req, res) => {
     // A settlement reduces the customer's old balance
     const customer = await Customer.findById(customerId);
     if (customer) {
-      let newOldBalance = customer.oldBalance - amountPaid;
+      let newOldBalance = round2(customer.oldBalance - paidAmt);
       let newAdvance = customer.advance;
 
       if (newOldBalance < 0) {
@@ -79,7 +81,7 @@ exports.createSettlement = async (req, res) => {
     if (paymentMode === 'Cash') {
       await cashLedgerController.addLedgerEntry({
         type: 'IN',
-        amount: amountPaid,
+        amount: paidAmt,
         source: 'Bill Settlement',
         referenceId: newSettlement._id,
         referenceModel: 'Settlement', // Wait, Settlement schema doesn't exist in the list but we can pass string

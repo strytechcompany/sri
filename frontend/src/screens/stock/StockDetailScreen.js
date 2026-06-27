@@ -13,8 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useStock } from '../../context/StockContext';
-import { useUsbPrinter } from '../../hooks/useUsbPrinter';
-import { printJewelryLabel } from '../../services/UsbPrinterService';
+import { printJewelryLabel } from '../../services/UsbPrinterService.js';
 
 const GOLD = '#D4AF37';
 const DARK_BROWN = '#4B2E05';
@@ -46,7 +45,6 @@ export default function StockDetailScreen({ navigation, route }) {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [printing, setPrinting] = useState(false);
-  const { status: printerStatus } = useUsbPrinter();
 
   useEffect(() => {
     loadItem();
@@ -66,14 +64,6 @@ export default function StockDetailScreen({ navigation, route }) {
   };
 
   const handlePrintLabel = async () => {
-    if (printerStatus !== 'connected') {
-      Alert.alert(
-        'Printer Not Connected',
-        'USB printer status: ' + printerStatus + '.\n\nPlease connect the TVS LP46 Lite via USB OTG cable and grant USB permission when prompted.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
     setPrinting(true);
     try {
       await printJewelryLabel({
@@ -84,7 +74,7 @@ export default function StockDetailScreen({ navigation, route }) {
         netWeight: item.netWeight,
         barcode: item.barcode || item.itemNumber,
       });
-      Alert.alert('Printed', 'Label sent to USB printer.');
+      Alert.alert('Printed', 'QR label sent to thermal printer.');
     } catch (err) {
       Alert.alert('Print Failed', err.message || 'Could not print the label.');
     } finally {
@@ -236,8 +226,8 @@ export default function StockDetailScreen({ navigation, route }) {
         {/* ─── Barcode Card ─── */}
         {item.barcode && (
           <View style={styles.barcodeCard}>
-            <MaterialCommunityIcons name="barcode-scan" size={22} color={GOLD} />
-            <Text style={styles.barcodeLabel}>Barcode</Text>
+            <MaterialCommunityIcons name="qrcode" size={22} color={GOLD} />
+            <Text style={styles.barcodeLabel}>QR Code</Text>
             <Text style={styles.barcodeValue}>{item.barcode}</Text>
           </View>
         )}
@@ -264,21 +254,6 @@ export default function StockDetailScreen({ navigation, route }) {
           )}
         </View>
 
-        {/* ─── USB Printer Status ─── */}
-        <View style={styles.usbStatusRow}>
-          <MaterialCommunityIcons
-            name={printerStatus === 'connected' ? 'usb' : 'usb-off'}
-            size={14}
-            color={printerStatus === 'connected' ? '#2C6E49' : '#999'}
-          />
-          <Text style={[styles.usbStatusText, printerStatus === 'connected' && styles.usbStatusConnected]}>
-            {printerStatus === 'connected'      ? 'USB Printer Connected'
-             : printerStatus === 'requesting_permission' ? 'Requesting USB permission…'
-             : printerStatus === 'unavailable'  ? 'USB printing (Android only)'
-             : 'USB Printer Disconnected'}
-          </Text>
-        </View>
-
         {/* ─── Action Buttons ─── */}
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -291,8 +266,8 @@ export default function StockDetailScreen({ navigation, route }) {
               <ActivityIndicator color={HEADER_BG} size="small" />
             ) : (
               <>
-                <MaterialCommunityIcons name="barcode" size={18} color={HEADER_BG} />
-                <Text style={styles.printBtnText}>Print Label</Text>
+                <MaterialCommunityIcons name="qrcode" size={18} color={HEADER_BG} />
+                <Text style={styles.printBtnText}>Print QR Label</Text>
               </>
             )}
           </TouchableOpacity>
@@ -524,21 +499,6 @@ const styles = StyleSheet.create({
   deleteBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   btnDisabled: { opacity: 0.6 },
 
-  usbStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-  usbStatusText: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '600',
-  },
-  usbStatusConnected: {
-    color: '#2C6E49',
-  },
   loadingText: { color: '#A08850', marginTop: 12, fontSize: 14, fontWeight: '600' },
   errorText: { color: DARK_BROWN, fontSize: 18, fontWeight: '700', marginTop: 12 },
   backLink: { marginTop: 16 },

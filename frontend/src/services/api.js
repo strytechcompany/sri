@@ -89,6 +89,18 @@ export const authAPI = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   verifyOtp: (email, otp) => api.post('/auth/verify-otp', { email, otp }),
   getProfile: () => api.get('/auth/profile'),
+  requestPasswordOtp: () => api.post('/auth/request-password-otp'),
+  resetPassword: (data) => api.post('/auth/change-password', data),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetForgotPassword: (data) => api.post('/auth/reset-forgot-password', data),
+};
+
+export const userAPI = {
+  list: () => api.get('/users'),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  toggleStatus: (id) => api.put(`/users/${id}/status`),
+  resetPassword: (id, data) => api.put(`/users/${id}/reset-password`, data),
 };
 
 export const dashboardAPI = {

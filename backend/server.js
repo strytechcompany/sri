@@ -16,12 +16,12 @@ const chitRoutes = require('./routes/chitRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const lineStockRoutes = require('./routes/lineStockRoutes');
 const settingRoutes = require('./routes/settingRoutes');
+const userRoutes = require('./routes/userRoutes');
 const { loadUsers } = require('./services/authStore');
 const Customer = require('./models/Customer');
 
 dotenv.config();
 
-// Initialize ENV users
 loadUsers();
 
 const app = express();
@@ -43,6 +43,7 @@ app.use('/api/chits', chitRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/linestock', lineStockRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({ success: true, message: 'Sri Vaishnavi Jewellers API is running' });
@@ -108,22 +109,21 @@ const seedDatabase = async () => {
       console.log('Settings seeded');
     }
 
-    const seedEmail = process.env.USER1_EMAIL?.toLowerCase().trim();
-    const seedPassword = process.env.USER1_PASSWORD;
-    const seedName = process.env.USER1_NAME || 'Super Admin';
-    const seedRole = process.env.USER1_ROLE || 'SuperAdmin';
-
-    if (seedEmail && seedPassword) {
-      const seedUserExists = await User.findOne({ email: seedEmail });
-      if (!seedUserExists) {
-        await User.create({
-          name: seedName,
-          email: seedEmail,
-          password: seedPassword,
-          role: seedRole,
-        });
-        console.log(`Seeded login user: ${seedEmail}`);
-      }
+    const superAdminEmail = 'srivaishnavijewellers1@gmail.com';
+    let superAdmin = await User.findOne({ email: superAdminEmail });
+    if (!superAdmin) {
+      const initialPassword = 'SVJAdmin@2024';
+      await User.create({
+        name: 'Svjadmin',
+        email: superAdminEmail,
+        password: initialPassword,
+        role: 'SuperAdmin',
+      });
+      console.log(`[Seed] SuperAdmin created: ${superAdminEmail} | Initial password: ${initialPassword}`);
+    } else if (superAdmin.role !== 'SuperAdmin') {
+      superAdmin.role = 'SuperAdmin';
+      await superAdmin.save();
+      console.log(`[Seed] SuperAdmin role upgraded for: ${superAdminEmail}`);
     }
 
     const goldRateExists = await GoldRate.findOne();

@@ -1,7 +1,7 @@
 'use strict';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { checkConnection, subscribeToStatus, isUsbPrinterAvailable } from '../services/UsbPrinterService';
+import { checkConnection, subscribeToStatus, isUsbPrinterAvailable } from '../services/UsbPrinterService.js';
 
 /**
  * React hook for USB printer connection state.

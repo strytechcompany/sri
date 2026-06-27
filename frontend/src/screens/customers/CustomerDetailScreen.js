@@ -255,7 +255,7 @@ export default function CustomerDetailScreen({ navigation, route }) {
         {/* Timestamps */}
         <View style={styles.infoCard}>
           <Text style={styles.cardTitle}>Record Info</Text>
-          <DetailRow icon="account-outline" label="Created By" value={customer.createdBy?.name || '—'} />
+          <DetailRow icon="account-outline" label="Admin Name" value={customer.createdBy?.name || customer.createdBy || '—'} />
           <View style={styles.sep} />
           <DetailRow icon="calendar-plus" label="Created At" value={formatDate(customer.createdAt)} />
           <View style={styles.sep} />

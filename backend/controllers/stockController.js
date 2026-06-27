@@ -14,6 +14,7 @@ exports.createStock = async (req, res) => {
       buyingTouch,
       quantity,
       notes,
+      barcode,
     } = req.body;
 
     const stock = new Stock({
@@ -27,6 +28,7 @@ exports.createStock = async (req, res) => {
       buyingTouch: parseFloat(buyingTouch) || 0,
       quantity: parseInt(quantity) || 1,
       notes,
+      barcode: barcode?.trim() || undefined,
       createdBy: req.user._id,
     });
 
@@ -55,9 +57,11 @@ exports.getAllStock = async (req, res) => {
       category = 'All',
       page = 1,
       limit = 50,
+      scan = '',      // scan=true bypasses isActive/isAvailable filters for scanner lookups
     } = req.query;
 
-    const query = { isActive: true, isAvailable: { $ne: false } };
+    // When called from a scanner, skip availability filters so all items are searchable
+    const query = scan === 'true' ? {} : { isActive: true, isAvailable: { $ne: false } };
 
     // Category filter
     if (category && category !== 'All') {
@@ -176,13 +180,57 @@ exports.getStockById = async (req, res) => {
   }
 };
 
-// Get stock by barcode
+// Get stock by barcode — no isActive/isAvailable filter so items can be looked up anytime
 exports.getStockByBarcode = async (req, res) => {
   try {
-    const stock = await Stock.findOne({ barcode: req.params.barcode });
+    const rawValue = String(req.params.barcode || '');
+    const value = rawValue.trim();
+    console.log('[getStockByBarcode] searching for:', JSON.stringify(value));
+
+    const buildCandidates = (input) => {
+      const base = String(input || '').trim();
+      if (!base) return [];
+
+      const collapsed = base.replace(/\s+/g, ' ');
+      const noSpaces = base.replace(/\s+/g, '');
+      const compact = base.replace(/[^a-zA-Z0-9_-]/g, '');
+      const tokenParts = base
+        .split(/[\s|,;:/\\]+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      return [...new Set([base, collapsed, noSpaces, compact, ...tokenParts])];
+    };
+
+    const candidates = buildCandidates(value);
+    const findByAnyField = async (patternBuilder) => {
+      for (const candidate of candidates) {
+        const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = patternBuilder(escaped);
+        const stock = await Stock.findOne({
+          $or: [
+            { barcode: pattern },
+            { itemNumber: pattern },
+          ],
+        });
+        if (stock) return stock;
+      }
+      return null;
+    };
+
+    // 1. Exact match on barcode/itemNumber
+    let stock = await findByAnyField((escaped) => new RegExp(`^${escaped}$`, 'i'));
+
+    // 2. Contains match across all text fields (catches partial / truncated labels)
     if (!stock) {
+      stock = await findByAnyField((escaped) => new RegExp(escaped, 'i'));
+    }
+
+    if (!stock) {
+      console.log('[getStockByBarcode] not found for value:', JSON.stringify(value));
       return res.status(404).json({ success: false, message: 'Item not found for this barcode' });
     }
+    console.log('[getStockByBarcode] found:', stock.itemNumber, stock.barcode);
     res.json({ success: true, data: stock });
   } catch (error) {
     console.error('Get Stock by Barcode Error:', error);

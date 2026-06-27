@@ -56,6 +56,9 @@ import LineStockBillPreviewScreen from '../screens/linestock/LineStockBillPrevie
 import LineStockSettlementScreen from '../screens/linestock/LineStockSettlementScreen';
 import LineStockSettlementBillPreviewScreen from '../screens/linestock/LineStockSettlementBillPreviewScreen';
 
+// Settings sub-screens
+import AddMemberScreen from '../screens/settings/AddMemberScreen';
+
 // Custom bottom bar
 import BottomTabBar from '../components/BottomTabBar';
 
@@ -128,6 +131,9 @@ export default function AppNavigator() {
             {/* Reports Module */}
             <Stack.Screen name="ReportsStack" component={ReportsScreen} />
             <Stack.Screen name="CashLedger" component={CashLedgerScreen} />
+
+            {/* Settings Sub-screens */}
+            <Stack.Screen name="AddMember" component={AddMemberScreen} />
 
             {/* Customers Module */}
             <Stack.Screen name="Customers" component={CustomerListScreen} />

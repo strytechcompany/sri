@@ -37,7 +37,7 @@ exports.createCustomer = async (req, res) => {
       oldBalance: parseFloat(oldBalance) || 0,
       advance: parseFloat(advance) || 0,
       remarks: remarks?.trim() || '',
-      createdBy: req.user._id,
+      createdBy: req.user?.name || req.user?.email || 'System',
     };
 
     const saveWithCodeRetry = async () => {
@@ -130,8 +130,7 @@ exports.getAllCustomers = async (req, res) => {
     const customers = await Customer.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
-      .populate('createdBy', 'name');
+      .limit(parseInt(limit));
 
     res.json({
       success: true,
@@ -155,7 +154,7 @@ exports.getCustomerById = async (req, res) => {
     const customer = await Customer.findOne({
       _id: req.params.id,
       isActive: true,
-    }).populate('createdBy', 'name');
+    });
 
     if (!customer) {
       return res.status(404).json({ success: false, message: 'Customer not found' });
@@ -269,8 +268,7 @@ exports.getByType = async (req, res) => {
     const customers = await Customer.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
-      .populate('createdBy', 'name');
+      .limit(parseInt(limit));
 
     res.json({
       success: true,

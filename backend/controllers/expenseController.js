@@ -12,7 +12,7 @@ exports.createExpense = async (req, res) => {
       expenseType,
       amount: Number(amount),
       notes,
-      createdBy: req.user?._id || null, // Assuming you have auth middleware setting req.user
+      createdBy: req.user?.name || req.user?.email || 'Unknown',
     });
 
     // Log Cash Outflow to Cash Ledger
@@ -24,7 +24,7 @@ exports.createExpense = async (req, res) => {
         referenceId: expense._id,
         referenceModel: 'Expense',
         description: expenseName,
-        createdBy: req.user?._id || undefined
+        createdBy: req.user?.name || req.user?.email || 'Unknown'
       });
     }
 
@@ -67,7 +67,6 @@ exports.getAllExpenses = async (req, res) => {
     }
 
     const expenses = await Expense.find(query)
-      .populate('createdBy', 'name')
       .sort({ expenseDate: -1, createdAt: -1 });
 
     res.json({ success: true, data: expenses });
@@ -80,7 +79,7 @@ exports.getAllExpenses = async (req, res) => {
 // Get single expense
 exports.getExpenseById = async (req, res) => {
   try {
-    const expense = await Expense.findById(req.params.id).populate('createdBy', 'name');
+    const expense = await Expense.findById(req.params.id);
     if (!expense) return res.status(404).json({ success: false, message: 'Expense not found' });
     res.json({ success: true, data: expense });
   } catch (error) {

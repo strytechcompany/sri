@@ -63,29 +63,102 @@ export default function IssueLineStockScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   
   const [showScanner, setShowScanner] = useState(false);
+  const [scannerTorch, setScannerTorch] = useState(false);
+  const [pendingScan, setPendingScan] = useState(null);
   const [permission, requestPermission] = useCameraPermissions();
 
-  const handleBarcodeSubmitDirect = async (code) => {
-    if (!code.trim()) return;
+  const normalizeScanValue = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const lines = raw
+      .split(/[\r\n]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    const primary = lines[0] || raw;
+    return primary.replace(/\s+/g, ' ').trim();
+  };
+
+  const buildScanCandidates = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+
+    const normalized = normalizeScanValue(raw);
+    const noSpaces = normalized.replace(/\s+/g, '');
+    const compact = normalized.replace(/[^a-zA-Z0-9_-]/g, '');
+    const parts = normalized
+      .split(/[\s|,;:/\\]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    return [...new Set([normalized, noSpaces, compact, raw, ...parts])];
+  };
+
+  const lookupAndAddStock = async (query) => {
+    const q = normalizeScanValue(query);
+    if (!q) return;
+
+    const candidates = buildScanCandidates(q);
+
+    // Step 1: barcode/itemNumber exact lookup — backend searches all fields, no availability filter
+    for (const candidate of candidates) {
+      try {
+        const res = await stockAPI.getByBarcode(candidate);
+        if (res?.data?.success && res.data.data) {
+          addStockItem(res.data.data);
+          setBarcodeSearch('');
+          setStockSearchResults([]);
+          return;
+        }
+      } catch (err) {
+        console.log('[lookupAndAddStock] getByBarcode error:', err?.response?.status, err?.message);
+      }
+    }
+
+    // Step 2: full-text search fallback — scan=true bypasses isAvailable filter
     try {
-      const res = await stockAPI.getByBarcode(code.trim());
-      if (res.data.success) {
-        addStockItem(res.data.data);
-        setBarcodeSearch('');
-        setStockSearchResults([]);
+      for (const candidate of candidates) {
+        const res = await stockAPI.getAll({ search: candidate, scan: 'true' });
+        if (!res?.data?.success) continue;
+
+        const flat = [];
+        (res.data.data || []).forEach(g => (g.records || []).forEach(r => flat.push(r)));
+        const lc = candidate.toLowerCase();
+        const match =
+          flat.find(item => (item.barcode || '').toLowerCase() === lc) ||
+          flat.find(item => (item.itemNumber || '').toLowerCase() === lc) ||
+          (flat.length === 1 ? flat[0] : null);
+
+        if (match) {
+          addStockItem(match);
+          setBarcodeSearch('');
+          setStockSearchResults([]);
+          return;
+        }
+
+        if (flat.length > 0) {
+          setStockSearchResults(flat.slice(0, 10));
+          return;
+        }
       }
-    } catch (err) {
-      if (stockSearchResults.length === 1) {
-        addStockItem(stockSearchResults[0]);
-        setBarcodeSearch('');
-        setStockSearchResults([]);
-      } else {
-        Alert.alert('Not Found', 'No stock found with this exact barcode or search text.');
-      }
+      Alert.alert('Not Found', `Scanned: "${q}"\n\nNo stock item found. Please check the item exists in stock.`);
+    } catch (e) {
+      console.log('[lookupAndAddStock] getAll error:', e?.message);
+      Alert.alert('Scan Error', `Could not fetch stock for "${q}".\nCheck server connection.`);
     }
   };
 
-  const handleBarcodeSubmit = () => handleBarcodeSubmitDirect(barcodeSearch);
+  // Handle scan via state to avoid stale-closure issues with native callbacks
+  useEffect(() => {
+    if (!pendingScan) return;
+    const val = pendingScan;
+    setPendingScan(null);
+    lookupAndAddStock(val);
+  }, [pendingScan]);
+
+  const handleBarcodeSubmitDirect = (code) => lookupAndAddStock(code);
+  const handleBarcodeSubmit = () => lookupAndAddStock(barcodeSearch);
 
   const openScanner = async () => {
     if (!permission?.granted) {
@@ -95,13 +168,16 @@ export default function IssueLineStockScreen({ navigation }) {
         return;
       }
     }
+    setScannerTorch(false);
     setShowScanner(true);
   };
 
   const handleBarCodeScanned = ({ data }) => {
     setShowScanner(false);
-    setBarcodeSearch(data);
-    handleBarcodeSubmitDirect(data);
+    setScannerTorch(false);
+    const normalized = normalizeScanValue(data);
+    setBarcodeSearch(normalized);
+    setPendingScan(normalized);
   };
 
   useEffect(() => {
@@ -259,7 +335,7 @@ export default function IssueLineStockScreen({ navigation }) {
                 </TouchableOpacity>
                 <TextInput
                   style={styles.scanInput}
-                  placeholder="Scan Barcode or Search by Name..."
+                  placeholder="Scan QR Code or Search by Name..."
                   placeholderTextColor="#C4A97A"
                   value={barcodeSearch}
                   onChangeText={setBarcodeSearch}
@@ -365,19 +441,26 @@ export default function IssueLineStockScreen({ navigation }) {
             <TouchableOpacity onPress={() => setShowScanner(false)} style={{ padding: 8 }}>
               <MaterialCommunityIcons name="close" size={28} color="#FFF" />
             </TouchableOpacity>
-            <Text style={styles.scannerTitle}>Scan Barcode</Text>
+            <Text style={styles.scannerTitle}>Scan QR Code</Text>
             <View style={{ width: 44 }} />
           </View>
           <CameraView
             style={StyleSheet.absoluteFillObject}
             facing="back"
+            enableTorch={scannerTorch}
             barcodeScannerSettings={{
-              barcodeTypes: ["qr", "ean13", "ean8", "code128", "code39", "upc_a", "upc_e"],
+              barcodeTypes: ["qr", "code128", "code39", "ean13", "ean8", "itf14"],
             }}
             onBarcodeScanned={handleBarCodeScanned}
           />
-          <View style={styles.scannerOverlay}>
+          <View pointerEvents="box-none" style={styles.scannerOverlay}>
             <View style={styles.scannerTarget} />
+            <View style={styles.scannerControls}>
+              <TouchableOpacity style={styles.scannerControlBtn} onPress={() => setScannerTorch((prev) => !prev)}>
+                <MaterialCommunityIcons name={scannerTorch ? 'flashlight' : 'flashlight-off'} size={22} color="#FFF" />
+                <Text style={styles.scannerControlText}>{scannerTorch ? 'Torch On' : 'Torch Off'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -435,5 +518,8 @@ const styles = StyleSheet.create({
   scannerHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16, backgroundColor: 'rgba(0,0,0,0.5)' },
   scannerTitle: { color: '#FFF', fontSize: 18, fontWeight: '800' },
   scannerOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' },
-  scannerTarget: { width: 250, height: 250, borderWidth: 2, borderColor: GOLD, backgroundColor: 'rgba(255,255,255,0.1)' },
+  scannerTarget: { width: 220, height: 220, borderWidth: 2, borderColor: GOLD, backgroundColor: 'rgba(255,255,255,0.1)' },
+  scannerControls: { position: 'absolute', bottom: 40, alignSelf: 'center', pointerEvents: 'auto' },
+  scannerControlBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999 },
+  scannerControlText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
 });
