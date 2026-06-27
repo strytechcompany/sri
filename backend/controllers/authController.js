@@ -142,33 +142,28 @@ const sendOTPEmail = async (email, otp, name = 'User', type = 'login') => {
   console.log(`[EMAIL] Attempting OTP send → ${email} (type=${type})`);
   try {
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
+      host: 'smtp-relay.brevo.com',
       port: 587,
       secure: false,
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-      tls: { rejectUnauthorized: false },
+      auth: {
+        user: process.env.BREVO_SMTP_USER,
+        pass: process.env.BREVO_SMTP_PASS,
+      },
     });
 
     const subject = type === 'forgot-password'
       ? 'Sri Vaishnavi Jewellers — Password Reset OTP'
       : 'Sri Vaishnavi Jewellers — Login Verification Code';
 
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('SMTP timed out after 30s')), 30000)
-    );
+    const info = await transporter.sendMail({
+      from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject,
+      html: buildOtpEmailHtml(name, otp, type),
+      text: `Hello ${name},\n\nYour OTP is: ${otp}\n\nThis code expires in 5 minutes.\n\nSri Vaishnavi Jewellers`,
+    });
 
-    const info = await Promise.race([
-      transporter.sendMail({
-        from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject,
-        html: buildOtpEmailHtml(name, otp, type),
-        text: `Hello ${name},\n\nYour OTP is: ${otp}\n\nThis code expires in 5 minutes.\n\nSri Vaishnavi Jewellers`,
-      }),
-      timeout,
-    ]);
-
-    console.log(`[EMAIL] ✓ Sent | to=${email} msgId=${info.messageId}`);
+    console.log(`[EMAIL] ✓ Sent via Brevo | to=${email} msgId=${info.messageId}`);
     return true;
   } catch (error) {
     console.error(`[EMAIL] ✗ Failed | to=${email} | ${error.message}`);
