@@ -6,6 +6,7 @@ const StockSchema = new mongoose.Schema(
       type: String,
       unique: true,
       trim: true,
+      required: [true, 'Item Number is required'],
     },
     barcode: {
       type: String,
@@ -16,12 +17,6 @@ const StockSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Design name is required'],
       trim: true,
-    },
-    serialNumber: {
-      type: String,
-      trim: true,
-      sparse: true,
-      unique: true,
     },
     itemName: {
       type: String,
@@ -88,13 +83,8 @@ const StockSchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate itemNumber before saving
+// Auto-generate barcode before saving if not provided
 StockSchema.pre('save', async function (next) {
-  if (!this.itemNumber) {
-    const count = await mongoose.model('Stock').countDocuments();
-    const padded = String(count + 1).padStart(5, '0');
-    this.itemNumber = `SVJ-${padded}`;
-  }
   if (!this.barcode) {
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 7).toUpperCase();

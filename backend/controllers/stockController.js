@@ -6,7 +6,7 @@ exports.createStock = async (req, res) => {
     const {
       designName,
       itemName,
-      serialNumber,
+      itemNumber,
       supplierName,
       category,
       purity,
@@ -18,18 +18,22 @@ exports.createStock = async (req, res) => {
       barcode,
     } = req.body;
 
-    if (!serialNumber || !serialNumber.trim()) {
-      return res.status(400).json({ success: false, message: 'Serial Number is required.' });
+    if (!itemNumber || !String(itemNumber).trim()) {
+      return res.status(400).json({ success: false, message: 'Item Number is required.' });
     }
 
-    const snTrimmed = serialNumber.trim();
-    const duplicate = await Stock.findOne({ serialNumber: snTrimmed });
+    const inTrimmed = String(itemNumber).trim().toUpperCase();
+    if (!/^[A-Z0-9]+$/.test(inTrimmed)) {
+      return res.status(400).json({ success: false, message: 'Item Number must contain letters and numbers only (e.g. TH001, CH002).' });
+    }
+
+    const duplicate = await Stock.findOne({ itemNumber: inTrimmed });
     if (duplicate) {
-      return res.status(400).json({ success: false, message: `Serial Number "${snTrimmed}" already exists. Use a unique Serial Number.` });
+      return res.status(400).json({ success: false, message: `Item Number "${inTrimmed}" already exists. Use a unique Item Number.` });
     }
 
     const stock = new Stock({
-      serialNumber: snTrimmed,
+      itemNumber: inTrimmed,
       designName,
       itemName: itemName?.trim() || '',
       supplierName,
@@ -89,7 +93,6 @@ exports.getAllStock = async (req, res) => {
         { category: regex },
         { itemName: regex },
         { barcode: regex },
-        { serialNumber: regex },
       ];
     }
 
@@ -224,7 +227,6 @@ exports.getStockByBarcode = async (req, res) => {
           $or: [
             { barcode: pattern },
             { itemNumber: pattern },
-            { serialNumber: pattern },
           ],
         });
         if (stock) return stock;
@@ -258,7 +260,7 @@ exports.updateStock = async (req, res) => {
     const {
       designName,
       itemName,
-      serialNumber,
+      itemNumber,
       supplierName,
       category,
       purity,
@@ -274,13 +276,16 @@ exports.updateStock = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Stock item not found' });
     }
 
-    if (serialNumber !== undefined && serialNumber?.trim()) {
-      const snTrimmed = serialNumber.trim();
-      const duplicate = await Stock.findOne({ serialNumber: snTrimmed, _id: { $ne: req.params.id } });
-      if (duplicate) {
-        return res.status(400).json({ success: false, message: `Serial Number "${snTrimmed}" already exists. Use a unique Serial Number.` });
+    if (itemNumber !== undefined && String(itemNumber).trim()) {
+      const inTrimmed = String(itemNumber).trim().toUpperCase();
+      if (!/^[A-Z0-9]+$/.test(inTrimmed)) {
+        return res.status(400).json({ success: false, message: 'Item Number must contain letters and numbers only (e.g. TH001, CH002).' });
       }
-      stock.serialNumber = snTrimmed;
+      const duplicate = await Stock.findOne({ itemNumber: inTrimmed, _id: { $ne: req.params.id } });
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: `Item Number "${inTrimmed}" already exists. Use a unique Item Number.` });
+      }
+      stock.itemNumber = inTrimmed;
     }
 
     if (designName !== undefined) stock.designName = designName;

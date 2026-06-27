@@ -64,8 +64,16 @@ function ItemRow({ item, onEdit, onDelete, onPress }) {
 
       <View style={styles.itemActions}>
         <TouchableOpacity
+          style={[styles.actionBtn, styles.editBtn]}
+          onPress={(e) => { e.stopPropagation?.(); onEdit(item); }}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="pencil-outline" size={14} color={HEADER_BG} />
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.actionBtn, styles.deleteBtn]}
-          onPress={() => {
+          onPress={(e) => {
+            e.stopPropagation?.();
             Alert.alert(
               'Delete Item',
               `Delete ${item.itemNumber}?`,
@@ -88,7 +96,7 @@ function ItemRow({ item, onEdit, onDelete, onPress }) {
   );
 }
 
-export default function DesignCard({ group, onDelete, onItemPress }) {
+export default function DesignCard({ group, onDelete, onEdit, onItemPress }) {
   const [expanded, setExpanded] = useState(true);
 
   const totalQty = group.records.reduce((sum, r) => sum + r.quantity, 0);
@@ -130,6 +138,7 @@ export default function DesignCard({ group, onDelete, onItemPress }) {
               {idx > 0 && <View style={styles.separator} />}
               <ItemRow
                 item={item}
+                onEdit={onEdit}
                 onDelete={onDelete}
                 onPress={onItemPress}
               />

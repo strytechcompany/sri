@@ -86,8 +86,8 @@ export default function AddStockScreen({ navigation, route }) {
   const [purity, setPurity] = useState(editItem?.purity ?? '');
   const [buyingTouch, setBuyingTouch] = useState(editItem?.buyingTouch?.toString() ?? '');
   const [quantity, setQuantity] = useState(editItem?.quantity?.toString() ?? '1');
-  const [serialNumber, setSerialNumber] = useState(editItem?.serialNumber ?? '');
-  const [serialNumberError, setSerialNumberError] = useState('');
+  const [itemNumber, setItemNumber] = useState(editItem?.itemNumber ?? '');
+  const [itemNumberError, setItemNumberError] = useState('');
   const [notes, setNotes] = useState(editItem?.notes ?? '');
   const [barcode, setBarcode] = useState(editItem?.barcode ?? '');
   const [printing, setPrinting] = useState(false);
@@ -131,11 +131,16 @@ export default function AddStockScreen({ navigation, route }) {
 
   // ─── Validate & Save ──────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!serialNumber.trim()) {
-      setSerialNumberError('Serial Number is required.');
-      return Alert.alert('Validation', 'Serial Number is required.');
+    const inTrimmed = itemNumber.trim().toUpperCase();
+    if (!inTrimmed) {
+      setItemNumberError('Item Number is required.');
+      return Alert.alert('Validation', 'Item Number is required.');
     }
-    setSerialNumberError('');
+    if (!/^[A-Z0-9]+$/.test(inTrimmed)) {
+      setItemNumberError('Letters and numbers only (e.g. TH001, CH002).');
+      return Alert.alert('Validation', 'Item Number must contain letters and numbers only.');
+    }
+    setItemNumberError('');
     if (!designName.trim()) return Alert.alert('Validation', 'Design Name is required.');
     if (!category) return Alert.alert('Validation', 'Please select a Category.');
     if (!purity) return Alert.alert('Validation', 'Please select a Purity.');
@@ -154,7 +159,7 @@ export default function AddStockScreen({ navigation, route }) {
       }
 
       const payload = {
-        serialNumber: serialNumber.trim(),
+        itemNumber: inTrimmed,
         designName: designName.trim(),
         itemName: itemName.trim(),
         supplierName: supplierName.trim(),
@@ -218,42 +223,27 @@ export default function AddStockScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
         >
 
-          {/* Item Number (read-only if edit) */}
-          {isEdit && (
-            <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Item Number</Text>
-              <View style={styles.readonlyField}>
-                <Text style={styles.readonlyText}>{editItem.itemNumber}</Text>
-                <MaterialCommunityIcons name="shield-check" size={16} color={GOLD} />
-              </View>
-            </View>
-          )}
-
-          {!isEdit && (
-            <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>Item Number</Text>
-              <View style={styles.readonlyField}>
-                <MaterialCommunityIcons name="auto-fix" size={16} color={GOLD} style={{ marginRight: 8 }} />
-                <Text style={styles.readonlyText}>Auto-generated on save (SVJ-XXXXX)</Text>
-              </View>
-            </View>
-          )}
-
-          {/* Serial Number */}
+          {/* Item Number — alphanumeric, required */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Serial Number *</Text>
+            <Text style={styles.fieldLabel}>Item Number * (e.g. TH001, CH002)</Text>
             <TextInput
-              style={[styles.input, serialNumberError ? styles.inputError : null]}
-              value={serialNumber}
-              onChangeText={(t) => { setSerialNumber(t); if (serialNumberError) setSerialNumberError(''); }}
-              placeholder="e.g. Thali 1g, Chain 2g, Ring 3g"
+              style={[styles.input, itemNumberError ? styles.inputError : null]}
+              value={itemNumber}
+              onChangeText={(t) => {
+                // Strip special characters, auto-uppercase
+                setItemNumber(t.replace(/[^a-zA-Z0-9]/g, '').toUpperCase());
+                if (itemNumberError) setItemNumberError('');
+              }}
+              placeholder="e.g. TH001, CH002, SVJ1001"
               placeholderTextColor="#B09878"
-              autoCapitalize="words"
+              keyboardType="default"
+              autoCapitalize="characters"
+              autoCorrect={false}
             />
-            {serialNumberError ? (
-              <Text style={styles.errorNote}>{serialNumberError}</Text>
+            {itemNumberError ? (
+              <Text style={styles.errorNote}>{itemNumberError}</Text>
             ) : (
-              <Text style={styles.autoNote}>Unique identifier — e.g. "Thali 1g", "Chain 2g"</Text>
+              <Text style={styles.autoNote}>Unique alphanumeric identifier — letters and numbers only</Text>
             )}
           </View>
 

@@ -68,6 +68,10 @@ export default function StockManagementScreen({ navigation }) {
     navigation.navigate('StockDetail', { itemId: item._id });
   }, [navigation]);
 
+  const handleEdit = useCallback((item) => {
+    navigation.navigate('AddStock', { editItem: item });
+  }, [navigation]);
+
   // --- Received Handlers ---
   const handleFilterSelect = useCallback((f) => {
     setReceivedFilter(f);
@@ -170,6 +174,7 @@ export default function StockManagementScreen({ navigation }) {
               <DesignCard
                 group={item}
                 onDelete={handleDelete}
+                onEdit={handleEdit}
                 onItemPress={handleItemPress}
               />
             )}
