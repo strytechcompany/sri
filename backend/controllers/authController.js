@@ -140,26 +140,31 @@ const buildOtpEmailHtml = (name, otp, type = 'login') => {
 // ─── Email sender (used for both login OTP and forgot-password OTP) ─────────
 const sendOTPEmail = async (email, otp, name = 'User', type = 'login') => {
   try {
+    // Use port 587 (STARTTLS) explicitly — port 465 is blocked on most cloud providers
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      tls: { rejectUnauthorized: false },
     });
 
     const subject = type === 'forgot-password'
       ? 'Sri Vaishnavi Jewellers — Password Reset OTP'
       : 'Sri Vaishnavi Jewellers — Login Verification Code';
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
       to: email,
       subject,
       html: buildOtpEmailHtml(name, otp, type),
       text: `Hello ${name},\n\nYour OTP is: ${otp}\n\nThis code expires in 5 minutes. Do not share it with anyone.\n\nSri Vaishnavi Jewellers`,
     });
+    console.log(`[EMAIL] OTP sent | to=${email} msgId=${info.messageId}`);
     return true;
   } catch (error) {
-    console.error('Error sending OTP email:', error);
-    console.log(`\n=== OTP [${type}] ===\nEmail: ${email}\nOTP: ${otp}\n===================\n`);
+    console.error(`[EMAIL] Failed to send OTP to ${email} | ${error.message}`);
+    console.log(`[EMAIL] FALLBACK OTP | email=${email} otp=${otp} type=${type}`);
     return false;
   }
 };
