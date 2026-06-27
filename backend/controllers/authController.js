@@ -139,8 +139,8 @@ const buildOtpEmailHtml = (name, otp, type = 'login') => {
 
 // ─── Email sender (used for both login OTP and forgot-password OTP) ─────────
 const sendOTPEmail = async (email, otp, name = 'User', type = 'login') => {
+  console.log(`[EMAIL] Attempting OTP send → ${email} (type=${type})`);
   try {
-    // Use port 587 (STARTTLS) explicitly — port 465 is blocked on most cloud providers
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
@@ -153,18 +153,26 @@ const sendOTPEmail = async (email, otp, name = 'User', type = 'login') => {
       ? 'Sri Vaishnavi Jewellers — Password Reset OTP'
       : 'Sri Vaishnavi Jewellers — Login Verification Code';
 
-    const info = await transporter.sendMail({
-      from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject,
-      html: buildOtpEmailHtml(name, otp, type),
-      text: `Hello ${name},\n\nYour OTP is: ${otp}\n\nThis code expires in 5 minutes. Do not share it with anyone.\n\nSri Vaishnavi Jewellers`,
-    });
-    console.log(`[EMAIL] OTP sent | to=${email} msgId=${info.messageId}`);
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('SMTP timed out after 30s')), 30000)
+    );
+
+    const info = await Promise.race([
+      transporter.sendMail({
+        from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject,
+        html: buildOtpEmailHtml(name, otp, type),
+        text: `Hello ${name},\n\nYour OTP is: ${otp}\n\nThis code expires in 5 minutes.\n\nSri Vaishnavi Jewellers`,
+      }),
+      timeout,
+    ]);
+
+    console.log(`[EMAIL] ✓ Sent | to=${email} msgId=${info.messageId}`);
     return true;
   } catch (error) {
-    console.error(`[EMAIL] Failed to send OTP to ${email} | ${error.message}`);
-    console.log(`[EMAIL] FALLBACK OTP | email=${email} otp=${otp} type=${type}`);
+    console.error(`[EMAIL] ✗ Failed | to=${email} | ${error.message}`);
+    console.log(`[EMAIL] OTP for manual delivery → email=${email} otp=${otp}`);
     return false;
   }
 };
@@ -212,8 +220,9 @@ const login = async (req, res) => {
 
     // Fire-and-forget: don't block the HTTP response waiting for SMTP
     sendOTPEmail(user.email, otp, user.name, 'login').catch(err =>
-      console.error('[AUTH] OTP email failed:', err.message)
+      console.error('[AUTH] OTP email catch:', err.message)
     );
+    console.log(`[AUTH] OTP email triggered (fire-and-forget) for ${user.email}`);
 
     return res.status(200).json({
       success: true,
