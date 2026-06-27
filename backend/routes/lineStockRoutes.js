@@ -8,10 +8,9 @@ router.use(protect);
 
 router.get('/dashboard/summary', lineStockController.getDashboardSummary);
 router.get('/', lineStockController.getTransactions);
-router.get('/:id', lineStockController.getTransactionById);
 router.post('/issue', lineStockController.issueStock);
-
 router.post('/settle', settlementController.createSettlement);
 router.get('/settlement/:id', settlementController.getSettlementById);
+router.get('/:id', lineStockController.getTransactionById);
 
 module.exports = router;
