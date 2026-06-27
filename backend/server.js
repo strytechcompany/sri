@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
+const axios = require('axios');
 const connectDB = require('./config/mongodb');
 const authRoutes = require('./routes/authRoutes');
 const otpRoutes = require('./routes/otpRoutes');
@@ -56,39 +57,30 @@ app.get('/api/health', async (req, res) => {
 });
 
 app.get('/api/test-email', async (req, res) => {
-  const nodemailer = require('nodemailer');
   const result = {
     env: {
-      BREVO_SMTP_USER: process.env.BREVO_SMTP_USER ? '✓ set' : '✗ missing',
-      BREVO_SMTP_PASS: process.env.BREVO_SMTP_PASS ? '✓ set' : '✗ missing',
+      BREVO_API_KEY: process.env.BREVO_API_KEY ? '✓ set' : '✗ missing',
       EMAIL_USER: process.env.EMAIL_USER || '✗ missing',
     },
   };
-
-  const withTimeout = (promise, ms) => Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)),
-  ]);
-
   try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
-      secure: false,
-      auth: { user: process.env.BREVO_SMTP_USER, pass: process.env.BREVO_SMTP_PASS },
-    });
-    await withTimeout(transporter.verify(), 10000);
-    result.smtpVerify = '✓ connected';
-    const info = await withTimeout(transporter.sendMail({
-      from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
-      to: process.env.EMAIL_USER,
-      subject: 'Render Test Email',
-      text: 'OTP email is working from Render!',
-    }), 10000);
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: { name: 'Sri Vaishnavi Jewellers', email: process.env.EMAIL_USER },
+        to: [{ email: process.env.EMAIL_USER }],
+        subject: 'Render Test Email',
+        textContent: 'OTP email is working from Render!',
+      },
+      {
+        headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
     result.emailSent = '✓ sent';
-    result.messageId = info.messageId;
+    result.messageId = response.data.messageId;
   } catch (err) {
-    result.error = err.message;
+    result.error = err.response?.data?.message || err.message;
   }
   res.json(result);
 });
