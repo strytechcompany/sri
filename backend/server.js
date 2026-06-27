@@ -64,6 +64,12 @@ app.get('/api/test-email', async (req, res) => {
       EMAIL_USER: process.env.EMAIL_USER || '✗ missing',
     },
   };
+
+  const withTimeout = (promise, ms) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)),
+  ]);
+
   try {
     const transporter = nodemailer.createTransport({
       host: 'smtp-relay.brevo.com',
@@ -71,14 +77,14 @@ app.get('/api/test-email', async (req, res) => {
       secure: false,
       auth: { user: process.env.BREVO_SMTP_USER, pass: process.env.BREVO_SMTP_PASS },
     });
-    await transporter.verify();
+    await withTimeout(transporter.verify(), 10000);
     result.smtpVerify = '✓ connected';
-    const info = await transporter.sendMail({
+    const info = await withTimeout(transporter.sendMail({
       from: `"Sri Vaishnavi Jewellers" <${process.env.EMAIL_USER}>`,
       to: process.env.EMAIL_USER,
       subject: 'Render Test Email',
       text: 'OTP email is working from Render!',
-    });
+    }), 10000);
     result.emailSent = '✓ sent';
     result.messageId = info.messageId;
   } catch (err) {
